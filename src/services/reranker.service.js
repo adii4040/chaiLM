@@ -10,7 +10,7 @@ const cohere = new CohereClient({
  * Cross-Encoder Reranker using Cohere Rerank v3.5
  * Scores true semantic relevance between query and candidate text.
  */
-export async function rerankCandidates(query, candidates, topN = 5) {
+export async function rerankDocuments(query, candidates, topN = 5) {
     if (!candidates || candidates.length === 0) return [];
 
     try {

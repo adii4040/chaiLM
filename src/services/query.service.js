@@ -1,37 +1,18 @@
-// src/services/query.service.js
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import OpenAI from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
 import { config } from "../config/env.js";
 import { translateQuery } from "./llm.service.js";
 import { generateHyDeDocument } from "./hyde.service.js";
 import { reciprocalRankFusion } from "../utils/rrf.js";
-import { buildPrompt } from "../prompt/buildPrompt.js";
-import { rerankCandidates } from "./reranker.service.js";
-import { StructuredFinalResponseSchema } from "../utils/responseSchema.utils.js";
+import { rerankDocuments } from "./reranker.service.js";
+import { generateStructuredRAGResponse } from "./ragGenerator.service.js";
+import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
+import { ChatMessage } from "../models/ChatMessage.js";
 
 const embeddings = new OpenAIEmbeddings({
   model: config.openai.embeddingModel,
   apiKey: config.openai.apiKey,
 });
-
-const openai = new OpenAI({ apiKey: config.openai.apiKey });
-
-/**
- * Converts total seconds into HH:MM:SS format
- */
-function formatSecondsToTimestamp(totalSeconds = 0) {
-  const hrs = Math.floor(totalSeconds / 3600);
-  const mins = Math.floor((totalSeconds % 3600) / 60);
-  const secs = Math.floor(totalSeconds % 60);
-
-  const hh = String(hrs).padStart(2, "0");
-  const mm = String(mins).padStart(2, "0");
-  const ss = String(secs).padStart(2, "0");
-
-  return `${hh}:${mm}:${ss}`;
-}
 
 export async function processQueryPipeline({ query, sessionId, selectedSourceIds = [] }) {
   // 1. Instantiate vector store
@@ -70,73 +51,54 @@ export async function processQueryPipeline({ query, sessionId, selectedSourceIds
     { type: "original", query },
     { type: "rewritten", query: translations.rewritten },
     { type: "stepBack", query: translations.stepBack },
+    ...(translations.subQueries || []).map((sq) => ({ type: "subQuery", query: sq })),
     { type: "hyde", query: hydePassage },
-    ...translations.subQueries.map((subQ, i) => ({
-      type: `subQuery_${i + 1}`,
-      query: subQ,
-    })),
   ];
 
-  // 5. Scoped Qdrant filter
-  const mustFilters = [
-    { key: "metadata.sessionId", match: { value: sessionId } },
-  ];
-  if (selectedSourceIds.length > 0) {
-    mustFilters.push({ key: "metadata.sourceUrl", match: { any: selectedSourceIds } });
-  }
-
+  // 5. Configure Vector Retriever
   const vectorRetriever = vectorStore.asRetriever({
-    k: 5,
-    filter: { must: mustFilters },
+    k: config.retrieval.vectorTopK || 10,
+    filter: {
+      must: [
+        { key: "metadata.sessionId", match: { value: sessionId } },
+        ...(selectedSourceIds.length > 0
+          ? [{ key: "metadata.sourceUrl", match: { any: selectedSourceIds } }]
+          : []),
+      ],
+    },
   });
 
-  // 6. Parallel retrieval
-  const retrievalResults = await Promise.all(
-    searchRequests.map(async (request) => ({
-      type: request.type,
-      query: request.query,
-      docs: await vectorRetriever.invoke(request.query),
-    }))
+  // 6. Execute Multi-Angle Parallel Retrieval
+  const retrievalPromises = searchRequests.map(async (req) => {
+    try {
+      const docs = await vectorRetriever.invoke(req.query);
+      return { type: req.type, docs };
+    } catch (err) {
+      console.warn(`Retrieval failed for type [${req.type}]:`, err.message);
+      return { type: req.type, docs: [] };
+    }
+  });
+
+  const retrievalResults = await Promise.all(retrievalPromises);
+
+  // 7. Combine & Deduplicate via Reciprocal Rank Fusion (RRF)
+  const fusedDocs = reciprocalRankFusion(
+    retrievalResults,
+    config.retrieval.rrfK || 60
   );
 
-  // 7. RRF Fusion (Top 15 candidate pool)
-  const fusedCandidates = reciprocalRankFusion(retrievalResults, {
-    k: 60,
-    topK: 15,
-  });
+  // 8. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
+  const topChunksToRerank = fusedDocs.slice(0, 15);
+  const rerankedDocs = await rerankDocuments(
+    query,
+    topChunksToRerank,
+    config.retrieval.finalTopK || 5
+  );
 
-  if (fusedCandidates.length === 0) {
-    return {
-      query,
-      answer: {
-        summary: "I couldn't find any relevant information in your workspace.",
-        segments: [],
-      },
-      translations,
-      sources: [],
-    };
-  }
+  const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank.slice(0, 5);
 
-  // 8. Cross-Encoder Reranking (Top 5)
-  const finalChunks = await rerankCandidates(query, fusedCandidates, 5);
-
-  // 9. Structured Answer Synthesis via Zod Schema
-  const systemInstruction = buildPrompt(finalChunks);
-
-  const response = await openai.chat.completions.parse({
-    model: config.openai.chatModel || "gpt-4o-mini",
-    temperature: 0.2,
-    messages: [
-      { role: "system", content: systemInstruction },
-      { role: "user", content: query },
-    ],
-    response_format: zodResponseFormat(
-      StructuredFinalResponseSchema,
-      "rag_answer_response"
-    ),
-  });
-
-  const parsedAnswer = response.choices[0].message.parsed;
+  // 9. Synthesize final answer with citations
+  const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
 
   // 10. Format Sources with structured timestamp objects & direct YouTube deep links
   const formattedSources = finalChunks.map((item) => {
@@ -166,6 +128,24 @@ export async function processQueryPipeline({ query, sessionId, selectedSourceIds
       rerankScore: item.rerankScore,
     };
   });
+
+  // Persist User Query and Assistant Response to MongoDB ChatMessage collection
+  try {
+    await ChatMessage.create({
+      sessionId,
+      role: "user",
+      query: query,
+    });
+
+    await ChatMessage.create({
+      sessionId,
+      role: "assistant",
+      answer: parsedAnswer,
+      sources: formattedSources,
+    });
+  } catch (err) {
+    console.error("[Query Pipeline] Failed to persist ChatMessages to MongoDB:", err);
+  }
 
   return {
     query,

@@ -6,6 +6,7 @@ import { loadPDF } from "../loaders/pdf.loader.js";
 import { loadYoutubeTranscript } from "../loaders/youtube.loader.js";
 import { loadWeb } from "../loaders/web.loader.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.utils.js";
+import { Session } from "../models/Session.js";
 
 const embeddings = new OpenAIEmbeddings({
   model: config.openai.embeddingModel,
@@ -106,6 +107,33 @@ export async function processAndIndexDocument(sourcePayload) {
     console.log(`  → Indexed batch ${Math.floor(i / BATCH_SIZE) + 1} / ${Math.ceil(enrichedChunks.length / BATCH_SIZE)}`);
   }
 
+  let videoId = null;
+  if (sourcePayload.type === "youtube" && sourceUrl) {
+    const match = sourceUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+    videoId = match && match[2].length === 11 ? match[2] : null;
+  }
+
+  // Persist source metadata to MongoDB Session collection
+  try {
+    await Session.findOneAndUpdate(
+      { sessionId: sourcePayload.sessionId },
+      {
+        $addToSet: {
+          sources: {
+            title: documentTitle,
+            sourceType: sourcePayload.type,
+            sourceUrl: sourceUrl,
+            cloudinaryUrl: cloudinaryResult?.secure_url || null,
+            videoId: videoId,
+          },
+        },
+      },
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    console.error("[Indexer] Failed to persist source to MongoDB Session:", err);
+  }
+
   return {
     success: true,
     chunksIndexed: enrichedChunks.length,
@@ -122,6 +150,20 @@ export async function processAndIndexDocument(sourcePayload) {
  */
 export async function getDocumentsBySession(sessionId) {
   try {
+    // 1. Try fetching sources from MongoDB Session document
+    const sessionDoc = await Session.findOne({ sessionId });
+    if (sessionDoc && sessionDoc.sources && sessionDoc.sources.length > 0) {
+      return sessionDoc.sources.map((s) => ({
+        title: s.title,
+        sourceType: s.sourceType,
+        sourceUrl: s.sourceUrl,
+        cloudinaryUrl: s.cloudinaryUrl || null,
+        videoId: s.videoId || null,
+        indexedAt: s.indexedAt || null,
+      }));
+    }
+
+    // 2. Fallback to Qdrant vector store search
     const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
       url: config.qdrant.url,
       collectionName: config.qdrant.collection,

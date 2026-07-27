@@ -16,12 +16,14 @@ export const config = {
   transcriptApi: {
     apiKey: process.env.TRANSCRIPT_API_KEY,
   },
-  cohere: {
-    apiKey: process.env.COHERE_API_KEY,
-  },
   chunking: {
     chunkSize: Number(process.env.CHUNK_SIZE) || 600,
     chunkOverlap: Number(process.env.CHUNK_OVERLAP) || 150,
+  },
+  retrieval: {
+    vectorTopK: Number(process.env.VECTOR_TOP_K) || 10,
+    finalTopK: Number(process.env.FINAL_TOP_K) || 5,
+    rrfK: Number(process.env.RRF_K) || 60
   },
   cohere: {
     apiKey: process.env.COHERE_API_KEY
