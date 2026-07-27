@@ -73,8 +73,7 @@ export async function processAndIndexDocument(sourcePayload) {
   const documentTitle =
     sourcePayload.originalName ||
     rawDocs[0]?.metadata?.title ||
-    sourcePayload.url ||
-    "Untitled Document";
+    sourcePayload.url;
 
   console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (sessionId: ${sourcePayload.sessionId})...`);
 
@@ -115,19 +114,26 @@ export async function processAndIndexDocument(sourcePayload) {
 
   // Persist source metadata to MongoDB Session collection
   try {
-    await Session.findOneAndUpdate(
-      { sessionId: sourcePayload.sessionId },
-      {
-        $addToSet: {
-          sources: {
-            title: documentTitle,
-            sourceType: sourcePayload.type,
-            sourceUrl: sourceUrl,
-            cloudinaryUrl: cloudinaryResult?.secure_url || null,
-            videoId: videoId,
-          },
+    const sessionExists = await Session.findOne({ sessionId: sourcePayload.sessionId });
+    const updateObj = {
+      $addToSet: {
+        sources: {
+          title: documentTitle,
+          sourceType: sourcePayload.type,
+          sourceUrl: sourceUrl,
+          cloudinaryUrl: cloudinaryResult?.secure_url || null,
+          videoId: videoId,
         },
       },
+    };
+
+    if (!sessionExists || sessionExists.title === "Untitled Workspace") {
+      updateObj.$set = { title: documentTitle };
+    }
+
+    await Session.findOneAndUpdate(
+      { sessionId: sourcePayload.sessionId },
+      updateObj,
       { upsert: true, new: true }
     );
   } catch (err) {
