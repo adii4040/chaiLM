@@ -32,7 +32,6 @@ async function loadDocuments(source) {
  * Ingestion Pipeline for indexing PDF documents, YouTube transcripts, and Web pages into Qdrant
  * @param {Object} sourcePayload - Source payload containing type, sessionId, filePath/url, originalName
  */
-
 export async function processAndIndexDocument(sourcePayload) {
   console.log(`[Indexer] Loading documents for type: ${sourcePayload.type}...`);
 
@@ -116,4 +115,40 @@ export async function processAndIndexDocument(sourcePayload) {
     cloudinaryUrl: cloudinaryResult?.secure_url || null,
     publicId: cloudinaryResult?.public_id || null,
   };
+}
+
+/**
+ * Retrieves list of indexed document sources for a specific session ID
+ */
+export async function getDocumentsBySession(sessionId) {
+  try {
+    const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
+      url: config.qdrant.url,
+      collectionName: config.qdrant.collection,
+    });
+
+    const docs = await vectorStore.similaritySearch("", 100, {
+      must: [{ key: "metadata.sessionId", match: { value: sessionId } }],
+    });
+
+    const uniqueMap = new Map();
+    for (const doc of docs) {
+      const meta = doc.metadata || {};
+      const key = meta.sourceUrl || meta.title || meta.source;
+      if (key && !uniqueMap.has(key)) {
+        uniqueMap.set(key, {
+          title: meta.title || "Untitled Document",
+          sourceType: meta.sourceType || "document",
+          sourceUrl: meta.sourceUrl || meta.source || "",
+          cloudinaryUrl: meta.cloudinaryUrl || null,
+          indexedAt: meta.indexedAt || null,
+        });
+      }
+    }
+
+    return Array.from(uniqueMap.values());
+  } catch (error) {
+    console.error("Error retrieving session documents:", error);
+    return [];
+  }
 }

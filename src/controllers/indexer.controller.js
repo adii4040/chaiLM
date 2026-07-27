@@ -1,4 +1,4 @@
-import { processAndIndexDocument } from "../services/indexer.service.js";
+import { processAndIndexDocument, getDocumentsBySession } from "../services/indexer.service.js";
 
 /**
  * Controller to handle document ingestion for PDFs, YouTube videos, and Websites.
@@ -10,11 +10,6 @@ export async function handleIndexDocument(req, res) {
     const hasFile = Boolean(req.file);
     const hasUrl = Boolean(url && typeof url === "string" && url.trim().length > 0);
 
-    console.log('hasFile: ', hasFile);
-    console.log('hasUrl: ', hasUrl);
-    console.log('url: ', url);
-    console.log('type: ', type);
-    console.log('sessionId: ', sessionId);
     // 1. Validate required sessionId
     if (!sessionId || typeof sessionId !== "string" || sessionId.trim().length === 0) {
       return res.status(400).json({ error: "Field 'sessionId' is required to scope documents" });
@@ -72,6 +67,34 @@ export async function handleIndexDocument(req, res) {
     console.error("Indexing Controller Error:", error);
     return res.status(500).json({
       error: error.message || "Failed to process and index document",
+    });
+  }
+}
+
+/**
+ * Controller to fetch all indexed document sources for a session
+ * Endpoint: GET /api/indexer/session/:sessionId
+ */
+export async function handleGetSessionSources(req, res) {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    const sources = await getDocumentsBySession(sessionId);
+
+    return res.status(200).json({
+      message: "Session sources retrieved successfully",
+      data: {
+        sessionId,
+        sources,
+      },
+    });
+  } catch (error) {
+    console.error("Get Session Sources Error:", error);
+    return res.status(500).json({
+      error: error.message || "Failed to retrieve session sources",
     });
   }
 }

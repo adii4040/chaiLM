@@ -152,7 +152,8 @@ export async function processQueryPipeline({ query, sessionId, selectedSourceIds
     return {
       text: item.pageContent,
       sourceType: item.sourceType || "document",
-      sourceUrl: item.sourceUrl,
+      sourceUrl: item.sourceUrl || item.document?.metadata?.sourceUrl || item.document?.metadata?.cloudinaryUrl || "",
+      cloudinaryUrl: item.document?.metadata?.cloudinaryUrl || item.cloudinaryUrl || (item.sourceUrl?.startsWith('http') ? item.sourceUrl : null),
       title: item.title,
       pageNumber: item.pageNumber || item.document?.metadata?.pageNumber || null,
       videoId: item.videoId || null,

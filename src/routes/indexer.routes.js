@@ -1,10 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
 import { upload } from "../middlewares/multer.middlewares.js";
-import { handleIndexDocument } from "../controllers/indexer.controller.js";
+import { handleIndexDocument, handleGetSessionSources } from "../controllers/indexer.controller.js";
 
 const router = Router();
-
 
 const handleUpload = (req, res, next) => {
   upload.single("file")(req, res, (err) => {
@@ -18,7 +17,7 @@ const handleUpload = (req, res, next) => {
   });
 };
 
-
 router.post("/", handleUpload, handleIndexDocument);
+router.get("/session/:sessionId", handleGetSessionSources);
 
 export default router;
