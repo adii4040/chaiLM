@@ -7,6 +7,7 @@ import { processQueryPipeline } from "../services/query.service.js";
 export async function handleQuery(req, res) {
   try {
     const { query, sessionId, selectedSourceIds } = req.body;
+    
 
     // 1. Validation
     if (!query || typeof query !== "string" || query.trim().length === 0) {

@@ -143,23 +143,24 @@ export async function processQueryPipeline({ query, sessionId, selectedSourceIds
     const startSecs = item.startSeconds || 0;
     const formattedTs = formatSecondsToTimestamp(startSecs);
     const videoId = item.videoId || "";
+    const isYoutube = item.sourceType === "youtube";
 
-    // Generates direct deep-link URL (e.g., https://youtu.be/QvsrQniD-O8?t=279s)
-    const timeUrl = videoId
+    const timeUrl = isYoutube && videoId
       ? `https://youtu.be/${videoId}?t=${startSecs}s`
       : item.sourceUrl || "";
 
     return {
       text: item.pageContent,
-      sourceType: item.sourceType,
+      sourceType: item.sourceType || "document",
       sourceUrl: item.sourceUrl,
       title: item.title,
-      videoId: item.videoId,
-      timestamp: {
+      pageNumber: item.pageNumber || item.document?.metadata?.pageNumber || null,
+      videoId: item.videoId || null,
+      timestamp: isYoutube ? {
         startSeconds: startSecs,
         formattedTimestamp: formattedTs,
         timeUrl: timeUrl,
-      },
+      } : null,
       rrfScore: item.score,
       rerankScore: item.rerankScore,
     };

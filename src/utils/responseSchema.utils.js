@@ -1,28 +1,34 @@
 import { z } from "zod";
 
 export const AnswerCitationSchema = z.object({
-    startSeconds: z
-        .number()
-        .describe("The exact start time in seconds corresponding to this point in the video, or null if general statement."),
-    formattedTimestamp: z
-        .string()
-        .describe("Timestamp in [HH:MM:SS] format corresponding to startSeconds, e.g. '00:04:39'"),
+  sourceType: z
+    .enum(["youtube", "pdf", "website", "unknown"])
+    .describe("The type of source being cited: 'youtube', 'pdf', or 'website'."),
+  pageNumber: z
+    .nullable(z.number())
+    .describe("Page number for PDF citations. MUST BE NULL for youtube or website sources."),
+  startSeconds: z
+    .nullable(z.number())
+    .describe("Start time in seconds for YouTube video citations. MUST BE NULL for PDFs or websites."),
+  formattedTimestamp: z
+    .nullable(z.string())
+    .describe("Timestamp in [HH:MM:SS] format for YouTube video citations. MUST BE NULL for PDFs or websites."),
 });
 
 export const AnswerSegmentSchema = z.object({
-    content: z
-        .string()
-        .describe("The answer text segment without inline string brackets like [00:04:39]."),
-    citation: z
-        .nullable(AnswerCitationSchema)
-        .describe("Optional timestamp citation object associated with this statement."),
+  content: z
+    .string()
+    .describe("The answer text segment without inline brackets."),
+  citation: z
+    .nullable(AnswerCitationSchema)
+    .describe("Citation object identifying the document page or video timestamp used for this segment, or null for general statements."),
 });
 
 export const StructuredFinalResponseSchema = z.object({
-    summary: z
-        .string()
-        .describe("A brief 1-2 sentence overall summary answering the user query."),
-    segments: z
-        .array(AnswerSegmentSchema)
-        .describe("An ordered array of answer points, key takeaways, or steps."),
+  summary: z
+    .string()
+    .describe("A brief 1-2 sentence overall summary answering the user query."),
+  segments: z
+    .array(AnswerSegmentSchema)
+    .describe("An ordered array of answer points, key takeaways, or steps."),
 });
