@@ -5,15 +5,13 @@ import { config } from "../config/env.js";
 import { loadPDF } from "../loaders/pdf.loader.js";
 import { loadYoutubeTranscript } from "../loaders/youtube.loader.js";
 import { loadWeb } from "../loaders/web.loader.js";
+import { uploadOnCloudinary } from "../utils/Cloudinary.utils.js";
 
 const embeddings = new OpenAIEmbeddings({
   model: config.openai.embeddingModel,
   apiKey: config.openai.apiKey,
 });
 
-/**
- * Dispatcher to route document loader based on source type (PDF, YouTube, Website)
- */
 async function loadDocuments(source) {
   if (source.type === "pdf") {
     return await loadPDF(source.filePath, source.originalName);
@@ -34,14 +32,32 @@ async function loadDocuments(source) {
  * Ingestion Pipeline for indexing PDF documents, YouTube transcripts, and Web pages into Qdrant
  * @param {Object} sourcePayload - Source payload containing type, sessionId, filePath/url, originalName
  */
+
 export async function processAndIndexDocument(sourcePayload) {
   console.log(`[Indexer] Loading documents for type: ${sourcePayload.type}...`);
+
+  // 1. Extract/Parse raw document content
   const rawDocs = await loadDocuments(sourcePayload);
+
+  let cloudinaryResult = null;
+  let sourceUrl = sourcePayload.url || sourcePayload.originalName || sourcePayload.filePath;
+
+  // 2. If PDF source, upload local temp file to Cloudinary
+  if (sourcePayload.type === "pdf" && sourcePayload.filePath) {
+    console.log("[Indexer] Uploading PDF file to Cloudinary...");
+    cloudinaryResult = await uploadOnCloudinary(sourcePayload.filePath);
+
+    if (!cloudinaryResult) {
+      throw new Error("Failed to upload PDF file to Cloudinary");
+    }
+
+    sourceUrl = cloudinaryResult.secure_url || cloudinaryResult.url;
+    console.log(`[Indexer] Cloudinary upload successful: ${sourceUrl}`);
+  }
 
   let chunks;
 
   if (sourcePayload.type === "youtube") {
-    // YouTube loader already handles chunking with accurate per-segment startSeconds timestamps.
     console.log("[Indexer] YouTube content detected. Skipping secondary splitter to preserve timestamp integrity.");
     chunks = rawDocs;
   } else {
@@ -60,11 +76,6 @@ export async function processAndIndexDocument(sourcePayload) {
     sourcePayload.url ||
     "Untitled Document";
 
-  const sourceUrl =
-    sourcePayload.url ||
-    sourcePayload.originalName ||
-    sourcePayload.filePath;
-
   console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (sessionId: ${sourcePayload.sessionId})...`);
 
   const enrichedChunks = chunks.map((chunk) => ({
@@ -75,6 +86,8 @@ export async function processAndIndexDocument(sourcePayload) {
       sessionId: sourcePayload.sessionId,
       sourceType: sourcePayload.type,
       sourceUrl: sourceUrl,
+      cloudinaryUrl: cloudinaryResult?.secure_url || null,
+      publicId: cloudinaryResult?.public_id || null,
       indexedAt: new Date().toISOString(),
     },
   }));
@@ -100,5 +113,7 @@ export async function processAndIndexDocument(sourcePayload) {
     sourceType: sourcePayload.type,
     title: documentTitle,
     sourceUrl: sourceUrl,
+    cloudinaryUrl: cloudinaryResult?.secure_url || null,
+    publicId: cloudinaryResult?.public_id || null,
   };
 }
