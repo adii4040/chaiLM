@@ -24,6 +24,7 @@ const AnswerSchema = new mongoose.Schema({
 const ChatMessageSchema = new mongoose.Schema(
   {
     sessionId: { type: String, required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     role: { type: String, enum: ["user", "assistant"], required: true },
     query: { type: String, default: null }, // Filled if role === 'user'
     answer: { type: AnswerSchema, default: null }, // Filled if role === 'assistant'
@@ -33,6 +34,6 @@ const ChatMessageSchema = new mongoose.Schema(
 );
 
 // Compound index for high-performance chronological queries
-ChatMessageSchema.index({ sessionId: 1, createdAt: 1 });
+ChatMessageSchema.index({ sessionId: 1, userId: 1, createdAt: 1 });
 
 export const ChatMessage = mongoose.model("ChatMessage", ChatMessageSchema);

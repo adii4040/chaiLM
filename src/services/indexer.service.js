@@ -31,7 +31,7 @@ async function loadDocuments(source) {
 
 /**
  * Ingestion Pipeline for indexing PDF documents, YouTube transcripts, and Web pages into Qdrant
- * @param {Object} sourcePayload - Source payload containing type, sessionId, filePath/url, originalName
+ * @param {Object} sourcePayload - Source payload containing type, sessionId, userId, filePath/url, originalName
  */
 export async function processAndIndexDocument(sourcePayload) {
   console.log(`[Indexer] Loading documents for type: ${sourcePayload.type}...`);
@@ -75,7 +75,7 @@ export async function processAndIndexDocument(sourcePayload) {
     rawDocs[0]?.metadata?.title ||
     sourcePayload.url;
 
-  console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (sessionId: ${sourcePayload.sessionId})...`);
+  console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (sessionId: ${sourcePayload.sessionId}, userId: ${sourcePayload.userId})...`);
 
   const enrichedChunks = chunks.map((chunk) => ({
     ...chunk,
@@ -83,6 +83,7 @@ export async function processAndIndexDocument(sourcePayload) {
       ...chunk.metadata,
       title: documentTitle,
       sessionId: sourcePayload.sessionId,
+      userId: String(sourcePayload.userId),
       sourceType: sourcePayload.type,
       sourceUrl: sourceUrl,
       cloudinaryUrl: cloudinaryResult?.secure_url || null,
@@ -112,10 +113,15 @@ export async function processAndIndexDocument(sourcePayload) {
     videoId = match && match[2].length === 11 ? match[2] : null;
   }
 
-  // Persist source metadata to MongoDB Session collection
+  // Persist source metadata to MongoDB Session collection bound to userId
   try {
-    const sessionExists = await Session.findOne({ sessionId: sourcePayload.sessionId });
+    const sessionExists = await Session.findOne({
+      sessionId: sourcePayload.sessionId,
+      userId: sourcePayload.userId,
+    });
+
     const updateObj = {
+      $set: { userId: sourcePayload.userId },
       $addToSet: {
         sources: {
           title: documentTitle,
@@ -128,13 +134,13 @@ export async function processAndIndexDocument(sourcePayload) {
     };
 
     if (!sessionExists || sessionExists.title === "Untitled Workspace") {
-      updateObj.$set = { title: documentTitle };
+      updateObj.$set.title = documentTitle;
     }
 
     await Session.findOneAndUpdate(
-      { sessionId: sourcePayload.sessionId },
+      { sessionId: sourcePayload.sessionId, userId: sourcePayload.userId },
       updateObj,
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
   } catch (err) {
     console.error("[Indexer] Failed to persist source to MongoDB Session:", err);
@@ -152,12 +158,12 @@ export async function processAndIndexDocument(sourcePayload) {
 }
 
 /**
- * Retrieves list of indexed document sources for a specific session ID
+ * Retrieves list of indexed document sources for a specific session ID and user ID
  */
-export async function getDocumentsBySession(sessionId) {
+export async function getDocumentsBySession(sessionId, userId) {
   try {
-    // 1. Try fetching sources from MongoDB Session document
-    const sessionDoc = await Session.findOne({ sessionId });
+    // 1. Try fetching sources from MongoDB Session document scoped to userId
+    const sessionDoc = await Session.findOne({ sessionId, userId });
     if (sessionDoc && sessionDoc.sources && sessionDoc.sources.length > 0) {
       return sessionDoc.sources.map((s) => ({
         title: s.title,

@@ -14,7 +14,7 @@ const embeddings = new OpenAIEmbeddings({
   apiKey: config.openai.apiKey,
 });
 
-export async function processQueryPipeline({ query, sessionId, selectedSourceIds = [] }) {
+export async function processQueryPipeline({ query, sessionId, userId, selectedSourceIds = [] }) {
   // 1. Instantiate vector store
   const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
     url: config.qdrant.url,
@@ -129,16 +129,18 @@ export async function processQueryPipeline({ query, sessionId, selectedSourceIds
     };
   });
 
-  // Persist User Query and Assistant Response to MongoDB ChatMessage collection
+  // Persist User Query and Assistant Response to MongoDB ChatMessage collection with userId scope
   try {
     await ChatMessage.create({
       sessionId,
+      userId,
       role: "user",
       query: query,
     });
 
     await ChatMessage.create({
       sessionId,
+      userId,
       role: "assistant",
       answer: parsedAnswer,
       sources: formattedSources,

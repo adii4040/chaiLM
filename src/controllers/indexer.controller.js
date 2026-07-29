@@ -7,12 +7,18 @@ import { processAndIndexDocument, getDocumentsBySession } from "../services/inde
 export async function handleIndexDocument(req, res) {
   try {
     const { type, url, sessionId } = req.body;
+    const userId = req.user?._id;
+
     const hasFile = Boolean(req.file);
     const hasUrl = Boolean(url && typeof url === "string" && url.trim().length > 0);
 
-    // 1. Validate required sessionId
+    // 1. Validate required sessionId and userId
     if (!sessionId || typeof sessionId !== "string" || sessionId.trim().length === 0) {
       return res.status(400).json({ error: "Field 'sessionId' is required to scope documents" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized user" });
     }
 
     // 2. Validate type
@@ -22,7 +28,7 @@ export async function handleIndexDocument(req, res) {
 
     const normalizedType = type.trim().toLowerCase();
 
-    // 3. Enforce mutual exclusion: user cannot provide both a PDF file upload AND a URL
+    // 3. Enforce mutual exclusion
     if (hasFile && hasUrl) {
       return res.status(400).json({
         error: "Conflicting inputs provided: Please upload either a PDF file OR provide a URL, not both.",
@@ -32,6 +38,7 @@ export async function handleIndexDocument(req, res) {
     let payload = {
       type: normalizedType,
       sessionId: sessionId.trim(),
+      userId,
     };
 
     // 4. Validate source-specific payload inputs
@@ -54,7 +61,7 @@ export async function handleIndexDocument(req, res) {
       });
     }
 
-    console.log(`[Indexer Controller] Processing ${normalizedType} document for session: ${payload.sessionId}`);
+    console.log(`[Indexer Controller] Processing ${normalizedType} document for session: ${payload.sessionId} (user: ${userId})`);
 
     // 5. Execute processing and vector indexing
     const result = await processAndIndexDocument(payload);
@@ -78,11 +85,17 @@ export async function handleIndexDocument(req, res) {
 export async function handleGetSessionSources(req, res) {
   try {
     const { sessionId } = req.params;
+    const userId = req.user?._id;
+
     if (!sessionId) {
       return res.status(400).json({ error: "Session ID is required" });
     }
 
-    const sources = await getDocumentsBySession(sessionId);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized user" });
+    }
+
+    const sources = await getDocumentsBySession(sessionId, userId);
 
     return res.status(200).json({
       message: "Session sources retrieved successfully",

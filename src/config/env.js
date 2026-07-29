@@ -2,6 +2,10 @@ import "dotenv/config";
 
 export const config = {
   port: Number(process.env.PORT) || 8000,
+  jwt: {
+    accessTokenSecret: process.env.ACCESS_TOKEN_SECRET_KEY || "chailm_access_secret_key_default_2026",
+    refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET_KEY || "chailm_refresh_secret_key_default_2026",
+  },
   qdrant: {
     url: process.env.QDRANT_URL || "http://127.0.0.1:6333",
     collection: process.env.QDRANT_COLLECTION || "workspace-docs",

@@ -2,8 +2,11 @@ import { Router } from "express";
 import multer from "multer";
 import { upload } from "../middlewares/multer.middlewares.js";
 import { handleIndexDocument, handleGetSessionSources } from "../controllers/indexer.controller.js";
+import { verifyJwt } from "../middlewares/auth.middleware.js";
 
 const router = Router();
+
+router.use(verifyJwt);
 
 const handleUpload = (req, res, next) => {
   upload.single("file")(req, res, (err) => {

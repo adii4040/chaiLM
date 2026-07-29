@@ -1,5 +1,7 @@
 import app from './src/app.js';
 import connectDb from './src/db/db.js';
+import dns from "node:dns";
+dns.setDefaultResultOrder("ipv4first");
 
 const PORT = process.env.PORT || 5000;
 

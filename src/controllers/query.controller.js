@@ -2,12 +2,12 @@ import { processQueryPipeline } from "../services/query.service.js";
 
 /**
  * Controller to handle RAG queries
- * Endpoint: POST /query
+ * Endpoint: POST /api/query
  */
 export async function handleQuery(req, res) {
   try {
     const { query, sessionId, selectedSourceIds } = req.body;
-    
+    const userId = req.user?._id;
 
     // 1. Validation
     if (!query || typeof query !== "string" || query.trim().length === 0) {
@@ -22,14 +22,20 @@ export async function handleQuery(req, res) {
       });
     }
 
-    // 2. Execute RAG Pipeline (Single LLM Translation + HyDE + Scoped Vector Search + RRF)
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized user" });
+    }
+
+    // 2. Execute RAG Pipeline with user scope
     const result = await processQueryPipeline({
       query: query.trim(),
       sessionId: sessionId.trim(),
+      userId,
       selectedSourceIds: Array.isArray(selectedSourceIds) ? selectedSourceIds : [],
     });
 
-    console.log('RESULT: ', result)
+    console.log('[Query Controller] Result generated successfully for user:', userId);
+
     // 3. Return response with cited sources
     return res.status(200).json({
       message: "Query processed successfully",
@@ -38,7 +44,7 @@ export async function handleQuery(req, res) {
         answer: result.answer,
         translations: result.translations,
         hyde: result.hyde,
-        sources: result.sources, // Structured array of chunks with videoId, startSeconds, titles
+        sources: result.sources,
       },
     });
   } catch (error) {

@@ -16,6 +16,7 @@ const SourceSchema = new mongoose.Schema({
 const SessionSchema = new mongoose.Schema(
   {
     sessionId: { type: String, required: true, unique: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     title: { type: String, default: "Untitled Workspace" },
     sources: [SourceSchema],
   },
