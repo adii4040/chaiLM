@@ -1,42 +1,47 @@
-import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { firecrawlApp } from "../lib/index.js";
 import { config } from "../config/env.js";
 
+
+export async function scrapWebsite(url) {
+  try {
+    const scrapeResult = await firecrawlApp.scrape(url, { formats: ['markdown'] });
+    console.log("Scraped content successfully", scrapeResult)
+     const markdown = scrapeResult.markdown || scrapeResult.data?.markdown || "";
+    console.log("[Web Processor] Scraped markdown content logged successfully.");
+
+    const title = scrapeResult.metadata?.title || scrapeResult.data?.metadata?.title || url;
+    return {markdown, title}
+  } catch (error) {
+    console.log(error)
+  }
+}
+
 /**
- * Loads a web page URL using Cheerio, splits content into text chunks, and returns metadata
+ * Loads a web page URL using Firecrawl, chunks the markdown text, and returns chunks & metadata
  * @param {string} url - Target website URL
  * @returns {Promise<Object>} Object containing chunks, title, sourceUrl, cloudinaryUrl
  */
 export async function processWeb(url) {
   try {
-    console.log(`[Web Processor] Loading web content for URL: ${url}...`);
-    const loader = new CheerioWebBaseLoader(url);
-    const rawDocs = await loader.load();
+    const targetUrl = url || 'https://www.amazon.com';
+    const {markdown, title} = await scrapWebsite(targetUrl)
 
-    const title = rawDocs[0]?.metadata?.title || url;
-
-    const formattedDocs = rawDocs.map((doc) => ({
-      ...doc,
-      metadata: {
-        ...doc.metadata,
-        title: title,
-        source: url,
-        sourceType: "website",
-      },
-    }));
-
-    console.log("[Web Processor] Splitting web document content into text chunks...");
+    console.log("[Web Processor] Splitting scraped markdown into text chunks...");
     const splitter = new RecursiveCharacterTextSplitter({
       chunkSize: config.chunking?.chunkSize || 600,
       chunkOverlap: config.chunking?.chunkOverlap || 150,
     });
 
-    const chunks = await splitter.splitDocuments(formattedDocs);
+    const chunks = await splitter.createDocuments(
+      [markdown],
+      [{ source: targetUrl, sourceType: "website", title }]
+    );
 
     return {
       chunks,
       title,
-      sourceUrl: url,
+      sourceUrl: targetUrl,
       cloudinaryUrl: null,
     };
   } catch (error) {

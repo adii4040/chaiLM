@@ -4,6 +4,9 @@ export const AnswerCitationSchema = z.object({
   sourceId: z
     .nullable(z.string())
     .describe("The unique sourceId of the document or video being cited, or null if unknown."),
+  sourceUrl: z
+    .nullable(z.string())
+    .describe("The specific URL associated with the cited segment. Extract this from markdown links in content if available, otherwise use the general Source URL from metadata."),
   sourceType: z
     .enum(["youtube", "pdf", "website", "unknown"])
     .describe("The type of source being cited: 'youtube', 'pdf', or 'website'."),

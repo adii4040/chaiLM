@@ -8,9 +8,11 @@ export function formatWebDocument(doc, index = 0) {
   const title = doc.title || "Web Page";
   const sourceUrl = doc.sourceUrl || doc.source || "Unknown Source";
   const content = doc.pageContent || doc.content || "";
+  const sourceId = doc.sourceId || doc.document?.metadata?.sourceId || "";
 
   return `==============================
 Document ${index + 1}
+Source ID: ${sourceId}
 Type: WEBSITE
 Title: ${title}
 Source URL: ${sourceUrl}

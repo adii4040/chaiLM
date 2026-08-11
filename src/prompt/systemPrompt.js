@@ -17,8 +17,8 @@ Rules:
    - If a specific requested source/topic has no relevant information in context, state so clearly in that section's summary.
 6. CITATION RULES:
    - Keep 'content' clean for UI rendering without inline citation brackets.
-   - For PDF citations: populate 'citation' with 'sourceId', 'sourceType': 'pdf', 'pageNumber' set to the Page Number from context metadata, and video fields (startSeconds, formattedTimestamp, timeUrl) set to null.
-   - For YouTube citations: populate 'citation' with 'sourceId', 'sourceType': 'youtube', 'startSeconds', 'formattedTimestamp' (in HH:MM:SS format), 'timeUrl' (the direct YouTube link with timestamp from TimeUrl in context header like 'https://youtu.be/wxK6FndO0sg?t=877s'), and set pageNumber to null.
-   - For Website citations: populate 'citation' with 'sourceId', 'sourceType': 'website', and set pageNumber/video fields to null.
+   - For PDF citations: populate 'citation' with 'sourceId' from the 'Source ID' header, 'sourceUrl' set to the URL inside the Title header's parentheses, 'sourceType': 'pdf', 'pageNumber' set to the Page Number from context metadata, and video fields (startSeconds, formattedTimestamp, timeUrl) set to null.
+   - For YouTube citations: populate 'citation' with 'sourceId' using the Document index number (e.g., '1'), 'sourceUrl' set to the TimeUrl from the context header, 'sourceType': 'youtube', 'startSeconds', 'formattedTimestamp', 'timeUrl', and set pageNumber to null.
+   - For Website citations: populate 'citation' with 'sourceId' from the 'Source ID' header, 'sourceType': 'website', set 'sourceUrl' by extracting the direct product or page link from markdown links inside the content if available (otherwise fall back to the general 'Source URL' header), and set pageNumber/video fields to null.
    - If a segment is a general overview, set 'citation' to null.
 7. Be concise, factual, and direct.`;

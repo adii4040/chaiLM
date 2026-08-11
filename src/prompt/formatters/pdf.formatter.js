@@ -9,9 +9,11 @@ export function formatPdfDocument(doc, index = 0) {
   const pageNum = doc.pageNumber || doc.metadata?.loc?.pageNumber || doc.startSeconds || 1;
   const sourceUrl = doc.sourceUrl || doc.source || "Unknown Source";
   const content = doc.pageContent || doc.content || "";
+  const sourceId = doc.sourceId || doc.document?.metadata?.sourceId || "";
 
   return `==============================
 Document ${index + 1}
+Source ID: ${sourceId}
 Type: PDF
 Title: ${title} (${sourceUrl})
 Page Number: ${pageNum}
