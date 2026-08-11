@@ -6,21 +6,62 @@ import { rerankDocuments } from "./reranker.service.js";
 import { generateStructuredRAGResponse } from "./ragGenerator.service.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
 import { ChatMessage } from "../models/ChatMessage.js";
+import { Workspace } from "../models/Workspace.js";
 import { getVectorStore } from "./qdrant.service.js";
 
 export async function processQueryPipeline({ query, workspaceId, userId, selectedSourceIds = [] }) {
-  // 1. Instantiate vector store via Qdrant service
+  // 1. Verify workspace exists before doing any processing
+  const workspaceDoc = await Workspace.findOne({ workspaceId, userId });
+  if (!workspaceDoc) {
+    const error = new Error(`Workspace with ID '${workspaceId}' does not exist or access is unauthorized.`);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // 2. Verify workspace has indexed sources
+  if (!workspaceDoc.sources || workspaceDoc.sources.length === 0) {
+    const error = new Error(`Workspace '${workspaceId}' has no indexed sources. Please index a document first.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 3. Validate selectedSourceIds (MongoDB Object IDs) against workspace sources
+  let targetSourceFilters = [];
+  if (selectedSourceIds.length > 0) {
+    const missingSourceIds = selectedSourceIds.filter((id) => {
+      return !workspaceDoc.sources.some(
+        (s) => s.sourceId === id || (s._id && s._id.toString() === id)
+      );
+    });
+
+    if (missingSourceIds.length > 0) {
+      const error = new Error(`Selected source(s) [${missingSourceIds.join(", ")}] are not present in the current workspace.`);
+      error.statusCode = 404;
+      throw error;
+    }
+
+    targetSourceFilters = selectedSourceIds.flatMap((id) => {
+      const match = workspaceDoc.sources.find(
+        (s) => s.sourceId === id || (s._id && s._id.toString() === id)
+      );
+      return match ? [match.sourceUrl, match.sourceId || match._id?.toString()] : [id];
+    }).filter(Boolean);
+  }
+
+  const sourceFilterCondition = targetSourceFilters.length > 0
+    ? [{ key: "metadata.sourceUrl", match: { any: targetSourceFilters } }]
+    : [];
+
+  // 4. Instantiate vector store via Qdrant service
   const vectorStore = await getVectorStore();
 
-  // 2. Fetch workspace title hint for HyDE
+  // 5. Fetch workspace title hint for HyDE
   let sourceTitleHint = "";
   try {
     const sampleDocs = await vectorStore.similaritySearch("", 1, {
       must: [
         { key: "metadata.workspaceId", match: { value: workspaceId } },
-        ...(selectedSourceIds.length > 0
-          ? [{ key: "metadata.sourceUrl", match: { any: selectedSourceIds } }]
-          : []),
+        ...sourceFilterCondition,
       ],
     });
 
@@ -31,13 +72,13 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     console.warn("Title hint fetch failed:", err.message);
   }
 
-  // 3. Parallel Expansion + HyDE
+  // 6. Parallel Expansion + HyDE
   const [translations, hydePassage] = await Promise.all([
     translateQuery(query),
     generateHyDeDocument(query, sourceTitleHint),
   ]);
 
-  // 4. Build search requests
+  // 7. Build search requests
   const searchRequests = [
     { type: "original", query },
     { type: "rewritten", query: translations.rewritten },
@@ -46,20 +87,18 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     { type: "hyde", query: hydePassage },
   ];
 
-  // 5. Configure Vector Retriever
+  // 8. Configure Vector Retriever
   const vectorRetriever = vectorStore.asRetriever({
     k: config.retrieval.vectorTopK || 10,
     filter: {
       must: [
         { key: "metadata.workspaceId", match: { value: workspaceId } },
-        ...(selectedSourceIds.length > 0
-          ? [{ key: "metadata.sourceUrl", match: { any: selectedSourceIds } }]
-          : []),
+        ...sourceFilterCondition,
       ],
     },
   });
 
-  // 6. Execute Multi-Angle Parallel Retrieval
+  // 9. Execute Multi-Angle Parallel Retrieval
   const retrievalPromises = searchRequests.map(async (req) => {
     try {
       const docs = await vectorRetriever.invoke(req.query);
@@ -72,13 +111,13 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
 
   const retrievalResults = await Promise.all(retrievalPromises);
 
-  // 7. Combine & Deduplicate via Reciprocal Rank Fusion (RRF)
+  // 10. Combine & Deduplicate via Reciprocal Rank Fusion (RRF)
   const fusedDocs = reciprocalRankFusion(
     retrievalResults,
     config.retrieval.rrfK || 60
   );
 
-  // 8. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
+  // 11. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
   const topChunksToRerank = fusedDocs.slice(0, 15);
   const rerankedDocs = await rerankDocuments(
     query,
@@ -88,10 +127,10 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
 
   const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank.slice(0, 5);
 
-  // 9. Synthesize final answer with citations
+  // 12. Synthesize final answer with citations
   const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
 
-  // 10. Format Sources with structured timestamp objects & direct YouTube deep links
+  // 13. Format Sources with structured timestamp objects & direct YouTube deep links
   const formattedSources = finalChunks.map((item) => {
     const startSecs = item.startSeconds || 0;
     const formattedTs = formatSecondsToTimestamp(startSecs);
@@ -103,6 +142,7 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
       : item.sourceUrl || "";
 
     return {
+      sourceId: item.sourceId || item.document?.metadata?.sourceId || null,
       text: item.pageContent,
       sourceType: item.sourceType || "document",
       sourceUrl: item.sourceUrl || item.document?.metadata?.sourceUrl || item.document?.metadata?.cloudinaryUrl || "",
