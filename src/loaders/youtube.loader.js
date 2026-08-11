@@ -1,4 +1,3 @@
-// src/loaders/youtube.loader.js
 import axios from "axios";
 import { Document } from "@langchain/core/documents";
 import { config } from "../config/env.js";
@@ -42,10 +41,16 @@ function chunkTranscriptWithTimestamps(transcript, { chunkSize = 800, overlapSeg
   return chunks;
 }
 
-export async function loadYoutubeTranscript(youtubeUrl) {
+/**
+ * Fetches YouTube transcript, performs timestamp-preserving chunking, and returns chunks with video metadata
+ * @param {string} youtubeUrl - YouTube video URL
+ * @returns {Promise<Object>} Object containing chunks, title, sourceUrl, videoId, cloudinaryUrl
+ */
+export async function processYouTube(youtubeUrl) {
   const videoId = extractVideoId(youtubeUrl);
 
   try {
+    console.log(`[YouTube Processor] Fetching transcript for video ID: ${videoId}...`);
     const response = await axios.get("https://transcriptapi.com/api/v2/youtube/transcript", {
       params: {
         video_url: videoId,
@@ -64,12 +69,15 @@ export async function loadYoutubeTranscript(youtubeUrl) {
       throw new Error("No transcript available for this video");
     }
 
-    const chunks = chunkTranscriptWithTimestamps(transcript, {
+    console.log("[YouTube Processor] YouTube content detected. Preserving timestamp integrity during chunking...");
+    const rawChunks = chunkTranscriptWithTimestamps(transcript, {
       chunkSize: config.chunking?.chunkSize || 800,
       overlapSegments: 2,
     });
 
-    const documents = chunks.map(
+    const title = metadata?.title || "YouTube Video";
+
+    const chunks = rawChunks.map(
       (chunk) =>
         new Document({
           pageContent: chunk.text,
@@ -78,14 +86,20 @@ export async function loadYoutubeTranscript(youtubeUrl) {
             sourceType: "youtube",
             videoId: videoId,
             startSeconds: chunk.startSeconds,
-            title: metadata?.title || "YouTube Video",
+            title: title,
             author: metadata?.author_name || "Unknown Author",
             language: language || "hi",
           },
         })
     );
 
-    return documents;
+    return {
+      chunks,
+      title,
+      sourceUrl: youtubeUrl,
+      videoId,
+      cloudinaryUrl: null,
+    };
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const statusCode = error.response?.status;

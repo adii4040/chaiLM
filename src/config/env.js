@@ -24,6 +24,7 @@ export const config = {
     chunkSize: Number(process.env.CHUNK_SIZE) || 600,
     chunkOverlap: Number(process.env.CHUNK_OVERLAP) || 150,
   },
+  BATCH_SIZE: 100,
   retrieval: {
     vectorTopK: Number(process.env.VECTOR_TOP_K) || 10,
     finalTopK: Number(process.env.FINAL_TOP_K) || 5,

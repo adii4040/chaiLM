@@ -1,116 +1,68 @@
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { OpenAIEmbeddings } from "@langchain/openai";
-import { QdrantVectorStore } from "@langchain/qdrant";
 import { config } from "../config/env.js";
-import { loadPDF } from "../loaders/pdf.loader.js";
-import { loadYoutubeTranscript } from "../loaders/youtube.loader.js";
-import { loadWeb } from "../loaders/web.loader.js";
-import { uploadOnCloudinary } from "../utils/Cloudinary.utils.js";
+import { processPDF, processYouTube, processWeb } from '../loaders/index.js'
 import { Workspace } from "../models/Workspace.js";
-
-const embeddings = new OpenAIEmbeddings({
-  model: config.openai.embeddingModel,
-  apiKey: config.openai.apiKey,
-});
-
-async function loadDocuments(source) {
-  if (source.type === "pdf") {
-    return await loadPDF(source.filePath, source.originalName);
-  }
-
-  if (source.type === "youtube") {
-    return await loadYoutubeTranscript(source.url);
-  }
-
-  if (source.type === "website") {
-    return await loadWeb(source.url);
-  }
-
-  throw new Error(`Unsupported document source type: '${source.type}'`);
-}
+import { getVectorStore } from "./qdrant.service.js";
 
 /**
- * Ingestion Pipeline for indexing PDF documents, YouTube transcripts, and Web pages into Qdrant
- * @param {Object} sourcePayload - Source payload containing type, workspaceId, userId, filePath/url, originalName
+ * 1. Verify workspace exists and belongs to the user
  */
-export async function processAndIndexDocument(sourcePayload) {
-  // 0. Verify workspace exists before doing any processing
-  const workspaceDoc = await Workspace.findOne({
-    workspaceId: sourcePayload.workspaceId,
-    userId: sourcePayload.userId,
-  });
-
+export async function verifyWorkspace(workspaceId, userId) {
+  const workspaceDoc = await Workspace.findOne({ workspaceId, userId });
   if (!workspaceDoc) {
-    const error = new Error(`Workspace with ID '${sourcePayload.workspaceId}' does not exist. Please create a workspace first.`);
+    const error = new Error(`Workspace with ID '${workspaceId}' does not exist. Please create a workspace first.`);
     error.statusCode = 404;
     throw error;
   }
+  return workspaceDoc;
+}
 
-  console.log(`[Indexer] Loading documents for type: ${sourcePayload.type}...`);
-
-  // 1. Extract/Parse raw document content
-  const rawDocs = await loadDocuments(sourcePayload);
-
-  let cloudinaryResult = null;
-  let sourceUrl = sourcePayload.url || sourcePayload.originalName || sourcePayload.filePath;
-
-  // 2. If PDF source, upload local temp file to Cloudinary
-  if (sourcePayload.type === "pdf" && sourcePayload.filePath) {  
-    console.log("[Indexer] Uploading PDF file to Cloudinary...");
-    cloudinaryResult = await uploadOnCloudinary(sourcePayload.filePath);
-
-    if (!cloudinaryResult) {
-      throw new Error("Failed to upload PDF file to Cloudinary");
-    }
-
-    sourceUrl = cloudinaryResult.secure_url || cloudinaryResult.url;
-    console.log(`[Indexer] Cloudinary upload successful: ${sourceUrl}`);
+/**
+ * 2. Delegate loading, parsing, Cloudinary uploading (if PDF), and chunking to source handlers
+ */
+export async function loadAndChunkDocument(sourcePayload) {
+  if (sourcePayload.type === "pdf") {
+    return await processPDF(sourcePayload.filePath, sourcePayload.originalName);
   }
-
-  let chunks;
 
   if (sourcePayload.type === "youtube") {
-    console.log("[Indexer] YouTube content detected. Skipping secondary splitter to preserve timestamp integrity.");
-    chunks = rawDocs;
-  } else {
-    console.log("[Indexer] Splitting document content into text chunks...");
-    const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize: config.chunking.chunkSize || 600,
-      chunkOverlap: config.chunking.chunkOverlap || 150,
-    });
-
-    chunks = await splitter.splitDocuments(rawDocs);
+    return await processYouTube(sourcePayload.url);
   }
 
-  const documentTitle =
-    sourcePayload.originalName ||
-    rawDocs[0]?.metadata?.title ||
-    sourcePayload.url;
+  if (sourcePayload.type === "website") {
+    return await processWeb(sourcePayload.url);
+  }
 
-  console.log(`[Indexer] Enriching metadata for ${chunks.length} chunks (workspaceId: ${sourcePayload.workspaceId}, userId: ${sourcePayload.userId})...`);
+  throw new Error(`Unsupported document source type: '${sourcePayload.type}'`);
+}
 
-  const enrichedChunks = chunks.map((chunk) => ({
+/**
+ * 3. Enrich text chunks with workspace, user, and source metadata
+ */
+export function enrichChunks(chunks, sourcePayload, metadata) {
+  return chunks.map((chunk) => ({
     ...chunk,
     metadata: {
       ...chunk.metadata,
-      title: documentTitle,
+      title: metadata.title,
       workspaceId: sourcePayload.workspaceId,
       userId: String(sourcePayload.userId),
       sourceType: sourcePayload.type,
-      sourceUrl: sourceUrl,
-      cloudinaryUrl: cloudinaryResult?.secure_url || null,
-      publicId: cloudinaryResult?.public_id || null,
+      sourceUrl: metadata.sourceUrl,
+      cloudinaryUrl: metadata.cloudinaryUrl || null,
+      publicId: metadata.publicId || null,
       indexedAt: new Date().toISOString(),
     },
   }));
+}
 
+/**
+ * 4. Embed enriched text chunks and batch upload vectors to Qdrant Vector Store
+ */
+export async function embedDocuments(enrichedChunks) {
   console.log("[Indexer] Connecting to Qdrant Vector Store...");
-  const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
-    url: config.qdrant.url,
-    collectionName: config.qdrant.collection,
-  });
+  const vectorStore = await getVectorStore();
 
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = config.BATCH_SIZE || 100;
   console.log(`[Indexer] Uploading ${enrichedChunks.length} chunks to Qdrant in batches of ${BATCH_SIZE}...`);
 
   for (let i = 0; i < enrichedChunks.length; i += BATCH_SIZE) {
@@ -118,41 +70,64 @@ export async function processAndIndexDocument(sourcePayload) {
     await vectorStore.addDocuments(batch);
     console.log(`  → Indexed batch ${Math.floor(i / BATCH_SIZE) + 1} / ${Math.ceil(enrichedChunks.length / BATCH_SIZE)}`);
   }
+}
 
-  let videoId = null;
-  if (sourcePayload.type === "youtube" && sourceUrl) {
-    const match = sourceUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
-    videoId = match && match[2].length === 11 ? match[2] : null;
-  }
-
-  // Persist source metadata to MongoDB Workspace collection bound to userId
-  try {
-    await Workspace.findOneAndUpdate(
-      { workspaceId: sourcePayload.workspaceId, userId: sourcePayload.userId },
-      {
-        $addToSet: {
-          sources: {
-            title: documentTitle,
-            sourceType: sourcePayload.type,
-            sourceUrl: sourceUrl,
-            cloudinaryUrl: cloudinaryResult?.secure_url || null,
-            videoId: videoId,
-          },
+/**
+ * 5. Persist source metadata into MongoDB Workspace collection
+ */
+export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata) {
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId },
+    {
+      $addToSet: {
+        sources: {
+          title: sourceMetadata.title,
+          sourceType: sourceMetadata.sourceType,
+          sourceUrl: sourceMetadata.sourceUrl,
+          cloudinaryUrl: sourceMetadata.cloudinaryUrl || null,
+          videoId: sourceMetadata.videoId || null,
         },
       },
-      { returnDocument: 'after' }
-    );
-  } catch (err) {
-    console.error("[Indexer] Failed to persist source to MongoDB Workspace:", err);
-  }
+    },
+    { returnDocument: 'after' }
+  );
+}
+
+/**
+ * Main Orchestrator Pipeline Function (used synchronously or inside Inngest workers)
+ * @param {Object} sourcePayload - Source payload containing type, workspaceId, userId, filePath/url, originalName
+ */
+export async function processAndIndexDocument(sourcePayload) {
+  // Step 1: Verify Workspace
+  await verifyWorkspace(sourcePayload.workspaceId, sourcePayload.userId);
+
+  console.log(`[Indexer] Processing document for type: ${sourcePayload.type}...`);
+
+  // Step 2: Load & Chunk Document
+  const docResult = await loadAndChunkDocument(sourcePayload);
+
+  // Step 3: Enrich Metadata
+  const enrichedChunks = enrichChunks(docResult.chunks, sourcePayload, docResult);
+
+  // Step 4: Embed & Store Vectors in Qdrant
+  await embedDocuments(enrichedChunks);
+
+  // Step 5: Save Source Metadata to MongoDB
+  await saveSourceToWorkspace(sourcePayload.workspaceId, sourcePayload.userId, {
+    title: docResult.title,
+    sourceType: sourcePayload.type,
+    sourceUrl: docResult.sourceUrl,
+    cloudinaryUrl: docResult.cloudinaryUrl || null,
+    videoId: docResult.videoId || null,
+  });
 
   return {
     success: true,
     chunksIndexed: enrichedChunks.length,
     sourceType: sourcePayload.type,
-    title: documentTitle,
-    sourceUrl: sourceUrl,
-    cloudinaryUrl: cloudinaryResult?.secure_url || null,
-    publicId: cloudinaryResult?.public_id || null,
+    title: docResult.title,
+    sourceUrl: docResult.sourceUrl,
+    cloudinaryUrl: docResult.cloudinaryUrl || null,
+    publicId: docResult.publicId || null,
   };
 }

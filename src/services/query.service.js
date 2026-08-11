@@ -1,5 +1,3 @@
-import { QdrantVectorStore } from "@langchain/qdrant";
-import { OpenAIEmbeddings } from "@langchain/openai";
 import { config } from "../config/env.js";
 import { translateQuery } from "./llm.service.js";
 import { generateHyDeDocument } from "./hyde.service.js";
@@ -8,18 +6,11 @@ import { rerankDocuments } from "./reranker.service.js";
 import { generateStructuredRAGResponse } from "./ragGenerator.service.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
 import { ChatMessage } from "../models/ChatMessage.js";
-
-const embeddings = new OpenAIEmbeddings({
-  model: config.openai.embeddingModel,
-  apiKey: config.openai.apiKey,
-});
+import { getVectorStore } from "./qdrant.service.js";
 
 export async function processQueryPipeline({ query, workspaceId, userId, selectedSourceIds = [] }) {
-  // 1. Instantiate vector store
-  const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
-    url: config.qdrant.url,
-    collectionName: config.qdrant.collection,
-  });
+  // 1. Instantiate vector store via Qdrant service
+  const vectorStore = await getVectorStore();
 
   // 2. Fetch workspace title hint for HyDE
   let sourceTitleHint = "";
