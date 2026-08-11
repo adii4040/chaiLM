@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 const SourceSchema = new mongoose.Schema({
+  sourceId: { type: String },
   title: { type: String, required: true },
   sourceType: { 
     type: String, 
@@ -13,6 +14,12 @@ const SourceSchema = new mongoose.Schema({
   indexedAt: { type: Date, default: Date.now },
 });
 
+SourceSchema.pre("save", function () {
+  if (!this.sourceId) {
+    this.sourceId = this._id.toString();
+  }
+});
+
 const WorkspaceSchema = new mongoose.Schema(
   {
     workspaceId: { type: String, unique: true, index: true },
@@ -23,11 +30,10 @@ const WorkspaceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-WorkspaceSchema.pre("save", function (next) {
+WorkspaceSchema.pre("save", function () {
   if (!this.workspaceId) {
     this.workspaceId = this._id.toString();
   }
-  next();
 });
 
 export const Workspace = mongoose.model("Workspace", WorkspaceSchema);

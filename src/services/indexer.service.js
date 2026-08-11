@@ -1,5 +1,6 @@
+import mongoose from "mongoose";
 import { config } from "../config/env.js";
-import { processPDF, processYouTube, processWeb } from '../loaders/index.js'
+import { processPDF, processYouTube, processWeb } from '../loaders/index.js';
 import { Workspace } from "../models/Workspace.js";
 import { getVectorStore } from "./qdrant.service.js";
 
@@ -43,6 +44,7 @@ export function enrichChunks(chunks, sourcePayload, metadata) {
     ...chunk,
     metadata: {
       ...chunk.metadata,
+      sourceId: metadata.sourceId,
       title: metadata.title,
       workspaceId: sourcePayload.workspaceId,
       userId: String(sourcePayload.userId),
@@ -81,6 +83,7 @@ export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata)
     {
       $addToSet: {
         sources: {
+          sourceId: sourceMetadata.sourceId,
           title: sourceMetadata.title,
           sourceType: sourceMetadata.sourceType,
           sourceUrl: sourceMetadata.sourceUrl,
@@ -106,14 +109,19 @@ export async function processAndIndexDocument(sourcePayload) {
   // Step 2: Load & Chunk Document
   const docResult = await loadAndChunkDocument(sourcePayload);
 
+  // Generate unique sourceId for this source
+  const sourceId = new mongoose.Types.ObjectId().toString();
+  const sourceData = { ...docResult, sourceId };
+
   // Step 3: Enrich Metadata
-  const enrichedChunks = enrichChunks(docResult.chunks, sourcePayload, docResult);
+  const enrichedChunks = enrichChunks(docResult.chunks, sourcePayload, sourceData);
 
   // Step 4: Embed & Store Vectors in Qdrant
   await embedDocuments(enrichedChunks);
 
   // Step 5: Save Source Metadata to MongoDB
   await saveSourceToWorkspace(sourcePayload.workspaceId, sourcePayload.userId, {
+    sourceId: sourceId,
     title: docResult.title,
     sourceType: sourcePayload.type,
     sourceUrl: docResult.sourceUrl,
@@ -123,6 +131,7 @@ export async function processAndIndexDocument(sourcePayload) {
 
   return {
     success: true,
+    sourceId: sourceId,
     chunksIndexed: enrichedChunks.length,
     sourceType: sourcePayload.type,
     title: docResult.title,

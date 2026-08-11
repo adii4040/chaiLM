@@ -71,12 +71,22 @@ export async function handleGetWorkspaceData(req, res) {
       return res.status(404).json({ error: "Workspace not found" });
     }
 
+    const formattedSources = (workspaceDoc.sources || []).map((s) => ({
+      sourceId: s.sourceId || s._id.toString(),
+      title: s.title,
+      sourceType: s.sourceType,
+      sourceUrl: s.sourceUrl,
+      cloudinaryUrl: s.cloudinaryUrl || null,
+      videoId: s.videoId || null,
+      indexedAt: s.indexedAt,
+    }));
+
     return res.status(200).json({
       message: "Workspace hydrated successfully",
       data: {
         workspaceId: workspaceDoc.workspaceId || workspaceDoc._id.toString(),
         title: workspaceDoc.title,
-        sources: workspaceDoc.sources || [],
+        sources: formattedSources,
         history: chatHistory.map((msg) => ({
           id: msg._id,
           role: msg.role,
@@ -108,14 +118,22 @@ export async function handleGetAllWorkspaces(req, res) {
     }
 
     const workspaces = await Workspace.find({ userId })
-      .select("workspaceId title sources.title sources.sourceType createdAt updatedAt")
+      .select("workspaceId title sources createdAt updatedAt")
       .sort({ updatedAt: -1 });
 
     const formattedWorkspaces = workspaces.map((ws) => ({
       workspaceId: ws.workspaceId || ws._id.toString(),
       title: ws.title,
       sourceCount: ws.sources ? ws.sources.length : 0,
-      sourcesSummary: ws.sources || [],
+      sourcesSummary: (ws.sources || []).map((s) => ({
+        sourceId: s.sourceId || s._id.toString(),
+        title: s.title,
+        sourceType: s.sourceType,
+        sourceUrl: s.sourceUrl,
+        cloudinaryUrl: s.cloudinaryUrl || null,
+        videoId: s.videoId || null,
+        indexedAt: s.indexedAt,
+      })),
       createdAt: ws.createdAt,
       updatedAt: ws.updatedAt,
     }));
