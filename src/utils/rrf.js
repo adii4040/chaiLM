@@ -7,12 +7,12 @@
  * @param {Array<{ type: string, query: string, docs: Array }>} results
  * @param {Object} options
  * @param {number} options.k - Constant score damper (default 60)
- * @param {number} options.topK - Number of top documents to keep (default 5)
+ * @param {number} options.topK - Number of top documents to keep (default 20)
  * @returns {Array<Object>} Fused documents
  */
 export function reciprocalRankFusion(
     results,
-    { k = 60, topK = 5 } = {}
+    { k = 60, topK = 20 } = {}
 ) {
     const fusedScores = new Map();
 
@@ -32,6 +32,7 @@ export function reciprocalRankFusion(
                 fusedScores.set(id, {
                     id,
                     score: 0,
+                    sourceId: metadata.sourceId || null,
                     retrievalType: metadata.retrievalType || "vector",
                     sourceType: metadata.sourceType || "unknown",
                     sourceUrl: metadata.sourceUrl || metadata.source || "Unknown Source",

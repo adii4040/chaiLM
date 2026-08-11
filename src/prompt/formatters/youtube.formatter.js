@@ -25,6 +25,8 @@ export function formatYoutubeDocument(doc, index = 0) {
   const startSecs = doc.startSeconds || 0;
   const formattedTimestamp = formatSecondsToTimestamp(startSecs);
   const sourceUrl = doc.sourceUrl || doc.source || "Unknown Source";
+  const videoId = doc.videoId || (sourceUrl.includes("v=") ? sourceUrl.split("v=")[1]?.split("&")[0] : "");
+  const timeUrl = doc.timeUrl || (videoId ? `https://youtu.be/${videoId}?t=${startSecs}s` : sourceUrl);
   const content = doc.pageContent || doc.content || "";
 
   return `==============================
@@ -32,6 +34,7 @@ Document ${index + 1}
 Type: YOUTUBE
 Channel/Creator: ${channelName}
 Title: ${title} (${sourceUrl})
+TimeUrl: ${timeUrl}
 Timestamp: [${formattedTimestamp}] (Start Seconds: ${startSecs}s)
 
 Content:

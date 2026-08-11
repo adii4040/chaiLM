@@ -26,16 +26,24 @@ export async function generateStructuredRAGResponse(userQuery, retrievedChunks) 
   } catch (error) {
     console.error("RAG Response Generation Error:", error);
     return {
-      summary: "I found relevant information in your indexed documents.",
-      segments: retrievedChunks.slice(0, 3).map((chunk) => ({
-        content: chunk.pageContent || chunk.text || "Key takeaway from document.",
-        citation: {
-          sourceType: chunk.sourceType || "unknown",
-          pageNumber: chunk.pageNumber || null,
-          startSeconds: chunk.startSeconds || null,
-          formattedTimestamp: chunk.formattedTimestamp || null,
+      overallSummary: "I found relevant information across your selected document sources.",
+      sections: [
+        {
+          sectionTitle: "Document Summary",
+          sourceId: retrievedChunks[0]?.sourceId || null,
+          summary: "Key findings from your retrieved documents.",
+          segments: retrievedChunks.slice(0, 3).map((chunk) => ({
+            content: chunk.pageContent || chunk.text || "Key takeaway from document.",
+            citation: {
+              sourceId: chunk.sourceId || null,
+              sourceType: chunk.sourceType || "unknown",
+              pageNumber: chunk.pageNumber || null,
+              startSeconds: chunk.startSeconds || null,
+              formattedTimestamp: chunk.formattedTimestamp || null,
+            },
+          })),
         },
-      })),
+      ],
     };
   }
 }

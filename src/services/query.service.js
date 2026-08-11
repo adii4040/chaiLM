@@ -111,26 +111,66 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
 
   const retrievalResults = await Promise.all(retrievalPromises);
 
-  // 10. Combine & Deduplicate via Reciprocal Rank Fusion (RRF)
+  // 10. Combine & Deduplicate via Reciprocal Rank Fusion (RRF) with Dynamic TopK
+  const numSources = selectedSourceIds.length > 0
+    ? selectedSourceIds.length
+    : (workspaceDoc.sources?.length || 1);
+
+  const dynamicTopK = Math.max(20, numSources * 5);
+
   const fusedDocs = reciprocalRankFusion(
     retrievalResults,
-    config.retrieval.rrfK || 60
+    { k: config.retrieval.rrfK || 60, topK: dynamicTopK }
   );
 
-  // 11. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
-  const topChunksToRerank = fusedDocs.slice(0, 15);
+  // 11. Source-Balanced Chunk Selection (Extract top chunks for EVERY target sourceId)
+  const targetSources = selectedSourceIds.length > 0
+    ? selectedSourceIds
+    : workspaceDoc.sources.map((s) => s.sourceId || s._id?.toString() || s.sourceUrl);
+
+  const chunksBySource = new Map();
+  for (const doc of fusedDocs) {
+    const sId = doc.sourceId || doc.document?.metadata?.sourceId || doc.sourceUrl;
+    if (!chunksBySource.has(sId)) {
+      chunksBySource.set(sId, []);
+    }
+    chunksBySource.get(sId).push(doc);
+  }
+
+  const balancedCandidates = [];
+  for (const sId of targetSources) {
+    const sourceChunks = (chunksBySource.get(sId) || []).concat(
+      fusedDocs.filter((d) => d.sourceUrl === sId || d.document?.metadata?.sourceUrl === sId)
+    );
+    const uniqueSourceChunks = Array.from(new Set(sourceChunks));
+    if (uniqueSourceChunks.length > 0) {
+      // Prioritize Page 1 chunk if it's a PDF so primary resume context is preserved
+      const page1Index = uniqueSourceChunks.findIndex(
+        (c) => (c.startSeconds === 1 || c.document?.metadata?.loc?.pageNumber === 1) && c.sourceType === "pdf"
+      );
+      if (page1Index > 0) {
+        const [page1Chunk] = uniqueSourceChunks.splice(page1Index, 1);
+        uniqueSourceChunks.unshift(page1Chunk);
+      }
+      balancedCandidates.push(...uniqueSourceChunks.slice(0, 5));
+    }
+  }
+
+  const topChunksToRerank = balancedCandidates.length > 0 ? balancedCandidates : fusedDocs.slice(0, 15);
+
+  // 12. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
   const rerankedDocs = await rerankDocuments(
     query,
     topChunksToRerank,
-    config.retrieval.finalTopK || 5
+    config.retrieval.finalTopK || topChunksToRerank.length
   );
 
-  const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank.slice(0, 5);
+  const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank;
 
-  // 12. Synthesize final answer with citations
+  // 13. Synthesize final NotebookLM-style sectioned response with citations
   const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
 
-  // 13. Format Sources with structured timestamp objects & direct YouTube deep links
+  // 14. Format Sources with structured timestamp objects & direct YouTube deep links
   const formattedSources = finalChunks.map((item) => {
     const startSecs = item.startSeconds || 0;
     const formattedTs = formatSecondsToTimestamp(startSecs);

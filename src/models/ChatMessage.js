@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 const CitationSchema = new mongoose.Schema({
+  sourceId: { type: String, default: null },
   sourceType: { 
     type: String, 
     enum: ["youtube", "pdf", "website", "unknown"],
@@ -9,6 +10,7 @@ const CitationSchema = new mongoose.Schema({
   pageNumber: { type: Number, default: null },
   startSeconds: { type: Number, default: null },
   formattedTimestamp: { type: String, default: null },
+  timeUrl: { type: String, default: null },
 });
 
 const AnswerSegmentSchema = new mongoose.Schema({
@@ -16,9 +18,18 @@ const AnswerSegmentSchema = new mongoose.Schema({
   citation: { type: CitationSchema, default: null },
 });
 
-const AnswerSchema = new mongoose.Schema({
-  summary: { type: String, required: true },
+const AnswerSectionSchema = new mongoose.Schema({
+  sectionTitle: { type: String, required: true },
+  sourceId: { type: String, default: null },
+  summary: { type: String, default: "" },
   segments: [AnswerSegmentSchema],
+});
+
+const AnswerSchema = new mongoose.Schema({
+  overallSummary: { type: String, required: true },
+  sections: [AnswerSectionSchema],
+  summary: { type: String, default: null },
+  segments: { type: [AnswerSegmentSchema], default: [] },
 });
 
 const ChatMessageSchema = new mongoose.Schema(
