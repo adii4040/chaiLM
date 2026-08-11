@@ -9,8 +9,7 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { Workspace } from "../models/Workspace.js";
 import { getVectorStore } from "./qdrant.service.js";
 
-export async function processQueryPipeline({ query, workspaceId, userId, selectedSourceIds = [] }) {
-  // 1. Verify workspace exists before doing any processing
+export async function verifyWorkSpace(workspaceId, userId) {
   const workspaceDoc = await Workspace.findOne({ workspaceId, userId });
   if (!workspaceDoc) {
     const error = new Error(`Workspace with ID '${workspaceId}' does not exist or access is unauthorized.`);
@@ -18,14 +17,18 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     throw error;
   }
 
-  // 2. Verify workspace has indexed sources
   if (!workspaceDoc.sources || workspaceDoc.sources.length === 0) {
     const error = new Error(`Workspace '${workspaceId}' has no indexed sources. Please index a document first.`);
     error.statusCode = 400;
     throw error;
   }
 
-  // 3. Validate selectedSourceIds (MongoDB Object IDs) against workspace sources
+
+  return workspaceDoc;
+}
+
+
+export async function getSourceFilters(workspaceDoc, selectedSourceIds = []) {
   let targetSourceFilters = [];
   if (selectedSourceIds.length > 0) {
     const missingSourceIds = selectedSourceIds.filter((id) => {
@@ -47,15 +50,11 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
       return match ? [match.sourceUrl, match.sourceId || match._id?.toString()] : [id];
     }).filter(Boolean);
   }
+  return targetSourceFilters;
+}
 
-  const sourceFilterCondition = targetSourceFilters.length > 0
-    ? [{ key: "metadata.sourceUrl", match: { any: targetSourceFilters } }]
-    : [];
 
-  // 4. Instantiate vector store via Qdrant service
-  const vectorStore = await getVectorStore();
-
-  // 5. Fetch workspace title hint for HyDE
+export async function getQueryTranslation({ vectorStore, query, workspaceId, sourceFilterCondition }) {
   let sourceTitleHint = "";
   try {
     const sampleDocs = await vectorStore.similaritySearch("", 1, {
@@ -72,13 +71,17 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     console.warn("Title hint fetch failed:", err.message);
   }
 
-  // 6. Parallel Expansion + HyDE
+  // Generate translations and HyDE document in parallel
   const [translations, hydePassage] = await Promise.all([
     translateQuery(query),
     generateHyDeDocument(query, sourceTitleHint),
   ]);
 
-  // 7. Build search requests
+  return { translations, hydePassage };
+}
+
+
+export async function retrieveChunks({ vectorStore, query, workspaceId, sourceFilterCondition, translations, hydePassage }) {
   const searchRequests = [
     { type: "original", query },
     { type: "rewritten", query: translations.rewritten },
@@ -87,7 +90,6 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     { type: "hyde", query: hydePassage },
   ];
 
-  // 8. Configure Vector Retriever
   const vectorRetriever = vectorStore.asRetriever({
     k: config.retrieval.vectorTopK || 10,
     filter: {
@@ -98,7 +100,6 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     },
   });
 
-  // 9. Execute Multi-Angle Parallel Retrieval
   const retrievalPromises = searchRequests.map(async (req) => {
     try {
       const docs = await vectorRetriever.invoke(req.query);
@@ -110,8 +111,12 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
   });
 
   const retrievalResults = await Promise.all(retrievalPromises);
+  return retrievalResults;
+}
 
-  // 10. Combine & Deduplicate via Reciprocal Rank Fusion (RRF) with Dynamic TopK
+
+export async function getTopChunksToReRank({ selectedSourceIds, workspaceDoc, retrievalResults }) {
+  // Combine and deduplicate retrieval sets via Reciprocal Rank Fusion (RRF) with dynamic topK
   const numSources = selectedSourceIds.length > 0
     ? selectedSourceIds.length
     : (workspaceDoc.sources?.length || 1);
@@ -123,7 +128,7 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     { k: config.retrieval.rrfK || 60, topK: dynamicTopK }
   );
 
-  // 11. Source-Balanced Chunk Selection (Extract top chunks for EVERY target sourceId)
+  // Source-Balanced Chunk Selection (Extract top chunks for every target sourceId to ensure representation)
   const targetSources = selectedSourceIds.length > 0
     ? selectedSourceIds
     : workspaceDoc.sources.map((s) => s.sourceId || s._id?.toString() || s.sourceUrl);
@@ -156,21 +161,11 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     }
   }
 
-  const topChunksToRerank = balancedCandidates.length > 0 ? balancedCandidates : fusedDocs.slice(0, 15);
+  return balancedCandidates.length > 0 ? balancedCandidates : fusedDocs.slice(0, 15);
+}
 
-  // 12. Rerank retrieved candidate chunks using Cohere Cross-Encoder v3.5
-  const rerankedDocs = await rerankDocuments(
-    query,
-    topChunksToRerank,
-    config.retrieval.finalTopK || topChunksToRerank.length
-  );
 
-  const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank;
-
-  // 13. Synthesize final NotebookLM-style sectioned response with citations
-  const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
-
-  // 14. Format Sources with structured timestamp objects & direct YouTube deep links
+export async function formatSources(finalChunks) {
   const formattedSources = finalChunks.map((item) => {
     const startSecs = item.startSeconds || 0;
     const formattedTs = formatSecondsToTimestamp(startSecs);
@@ -200,22 +195,66 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
     };
   });
 
-  // Persist User Query and Assistant Response to MongoDB ChatMessage collection with userId scope
-  try {
-    await ChatMessage.create({
-      workspaceId,
-      userId,
-      role: "user",
-      query: query,
-    });
+  return formattedSources;
+}
 
-    await ChatMessage.create({
-      workspaceId,
-      userId,
-      role: "assistant",
-      answer: parsedAnswer,
-      sources: formattedSources,
-    });
+
+export async function processQueryPipeline({ query, workspaceId, userId, selectedSourceIds = [] }) {
+  // 1. Verify workspace exists and user has access before doing any processing
+  const workspaceDoc = await verifyWorkSpace(workspaceId, userId);
+
+  // 2. Resolve and validate selectedSourceIds against workspace sources
+  const targetSourceFilters = await getSourceFilters(workspaceDoc, selectedSourceIds);
+
+  // 3. Build source filtering conditions for the vector database query
+  const sourceFilterCondition = targetSourceFilters.length > 0
+    ? [{ key: "metadata.sourceUrl", match: { any: targetSourceFilters } }]
+    : [];
+
+  // 4. Connect to Qdrant vector store
+  const vectorStore = await getVectorStore();
+
+  // 5. Translate query, expand, and generate HyDE document in parallel
+  const { translations, hydePassage } = await getQueryTranslation({ vectorStore, query, workspaceId, sourceFilterCondition });
+
+  // 6. Retrieve relevant chunks for all variations (original, translations, subqueries, HyDE)
+  const retrievalResults = await retrieveChunks({ vectorStore, query, workspaceId, sourceFilterCondition, translations, hydePassage });
+
+  // 7. Merge, deduplicate, and select balanced candidates using RRF
+  const topChunksToRerank = await getTopChunksToReRank({ selectedSourceIds, workspaceDoc, retrievalResults });
+
+  // 8. Rerank candidate chunks using Cohere Cross-Encoder v3.5
+  const rerankedDocs = await rerankDocuments(
+    query,
+    topChunksToRerank,
+    config.retrieval.finalTopK || topChunksToRerank.length
+  );
+
+  const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank;
+
+  // 9. Synthesize final structured response with citations
+  const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
+
+  // 10. Format citations/sources with structured metadata & deep links
+  const formattedSources = await formatSources(finalChunks);
+
+  // 11. Persist user query and assistant response to MongoDB ChatMessage collection in parallel
+  try {
+    await Promise.all([
+      ChatMessage.create({
+        workspaceId,
+        userId,
+        role: "user",
+        query: query,
+      }),
+      ChatMessage.create({
+        workspaceId,
+        userId,
+        role: "assistant",
+        answer: parsedAnswer,
+        sources: formattedSources,
+      })
+    ]);
   } catch (err) {
     console.error("[Query Pipeline] Failed to persist ChatMessages to MongoDB:", err);
   }

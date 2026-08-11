@@ -49,7 +49,7 @@ export async function handleQuery(req, res) {
     });
   } catch (error) {
     console.error("Query Controller Error:", error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: error.message || "An unexpected error occurred while processing your query",
     });
   }
