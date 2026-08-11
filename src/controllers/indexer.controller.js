@@ -1,4 +1,4 @@
-import { processAndIndexDocument, getDocumentsByWorkspace } from "../services/indexer.service.js";
+import { processAndIndexDocument } from "../services/indexer.service.js";
 
 /**
  * Controller to handle document ingestion for PDFs, YouTube videos, and Websites.
@@ -75,40 +75,6 @@ export async function handleIndexDocument(req, res) {
     const statusCode = error.statusCode || 500;
     return res.status(statusCode).json({
       error: error.message || "Failed to process and index document",
-    });
-  }
-}
-
-/**
- * Controller to fetch all indexed document sources for a workspace
- * Endpoint: GET /api/indexer/workspace/:workspaceId
- */
-export async function handleGetWorkspaceSources(req, res) {
-  try {
-    const { workspaceId } = req.params;
-    const userId = req.user?._id;
-
-    if (!workspaceId) {
-      return res.status(400).json({ error: "Workspace ID is required" });
-    }
-
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized user" });
-    }
-
-    const sources = await getDocumentsByWorkspace(workspaceId, userId);
-
-    return res.status(200).json({
-      message: "Workspace sources retrieved successfully",
-      data: {
-        workspaceId,
-        sources,
-      },
-    });
-  } catch (error) {
-    console.error("Get Workspace Sources Error:", error);
-    return res.status(500).json({
-      error: error.message || "Failed to retrieve workspace sources",
     });
   }
 }
