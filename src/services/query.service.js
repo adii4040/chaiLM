@@ -1,13 +1,15 @@
 import { config } from "../config/env.js";
-import { translateQuery } from "./llm.service.js";
-import { generateHyDeDocument } from "./hyde.service.js";
-import { reciprocalRankFusion } from "../utils/rrf.js";
-import { rerankDocuments } from "./reranker.service.js";
-import { generateStructuredRAGResponse } from "./ragGenerator.service.js";
+import {
+  translateQuery,
+  generateHyDeDocument,
+  rerankDocuments,
+  generateStructuredRAGResponse
+} from "./ai/index.js";
+import { reciprocalRankFusion } from "../utils/rrf.utils.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { Workspace } from "../models/Workspace.js";
-import { getVectorStore } from "./qdrant.service.js";
+import { getVectorStore } from "../lib/index.js";
 
 export async function verifyWorkSpace(workspaceId, userId) {
   const workspaceDoc = await Workspace.findOne({ workspaceId, userId });

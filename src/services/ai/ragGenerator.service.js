@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { config } from "../config/env.js";
-import { buildPrompt } from "../prompt/buildPrompt.js";
-import { StructuredFinalResponseSchema } from "../utils/responseSchema.utils.js";
+import { config } from "../../config/env.js";
+import { buildPrompt } from "../../prompt/buildPrompt.js";
+import { StructuredFinalResponseSchema } from "../../utils/responseSchema.utils.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 

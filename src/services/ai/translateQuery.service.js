@@ -2,7 +2,7 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { config } from "../config/env.js";
+import { config } from "../../config/env.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 

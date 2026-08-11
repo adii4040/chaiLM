@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { config } from "../config/env.js";
 import { processPDF, processYouTube, processWeb } from '../loaders/index.js';
 import { Workspace } from "../models/Workspace.js";
-import { getVectorStore } from "./qdrant.service.js";
+import { getVectorStore } from "../lib/index.js";
 
 /**
  * 1. Verify workspace exists and belongs to the user

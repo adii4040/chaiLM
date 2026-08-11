@@ -2,7 +2,7 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import path from "node:path";
 import { config } from "../config/env.js";
-import { uploadOnCloudinary } from "../utils/Cloudinary.utils.js";
+import { uploadOnCloudinary } from "../lib/index.js";
 
 
 async function extractPDF(filePath) {
