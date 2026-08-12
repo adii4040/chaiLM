@@ -1,8 +1,10 @@
 import { processAndIndexDocument } from "../services/indexer.service.js";
+import { inngest } from "../inngest/client.js";
 
 /**
  * Controller to handle document ingestion for PDFs, YouTube videos, and Websites.
  * Endpoint: POST /api/indexer
+ * Optional Query Param: ?async=true (default: true) to queue background job via Inngest
  */
 export async function handleIndexDocument(req, res) {
   try {
@@ -12,7 +14,7 @@ export async function handleIndexDocument(req, res) {
     const hasFile = Boolean(req.file);
     const hasUrl = Boolean(url && typeof url === "string" && url.trim().length > 0);
 
-    // 1. Validate required workspaceId and userId
+    // 1. Validate required workspaceId
     if (!workspaceId || typeof workspaceId !== "string" || workspaceId.trim().length === 0) {
       return res.status(400).json({ error: "Field 'workspaceId' is required to scope documents" });
     }
@@ -61,9 +63,28 @@ export async function handleIndexDocument(req, res) {
       });
     }
 
-    console.log(`[Indexer Controller] Processing ${normalizedType} document for workspace: ${payload.workspaceId} (user: ${userId})`);
+    // Check if client explicitly requested synchronous processing (e.g. ?async=false)
+    const isAsync = req.query.async !== "false";
 
-    // 5. Execute processing and vector indexing
+    if (isAsync) {
+      console.log(`[Indexer Controller] Dispatching 'document/index.requested' event to Inngest queue for ${normalizedType}...`);
+      await inngest.send({
+        name: "document/index.requested",
+        data: payload,
+      });
+
+      return res.status(202).json({
+        message: "Document indexing job queued successfully",
+        data: {
+          workspaceId: payload.workspaceId,
+          type: normalizedType,
+          status: "processing",
+        },
+      });
+    }
+
+    // Fallback: Synchronous execution if ?async=false
+    console.log(`[Indexer Controller] Processing ${normalizedType} document synchronously for workspace: ${payload.workspaceId}`);
     const result = await processAndIndexDocument(payload);
 
     return res.status(200).json({
