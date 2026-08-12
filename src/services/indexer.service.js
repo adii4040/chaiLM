@@ -74,10 +74,78 @@ export async function embedDocuments(enrichedChunks) {
   }
 }
 
+
 /**
- * 5. Persist source metadata into MongoDB Workspace collection
+ * Create an initial source record in MongoDB with PENDING status
+ */
+export async function createPendingSource(workspaceId, userId, sourcePayload) {
+  const { sourceId, type, url, originalName } = sourcePayload;
+  const initialTitle = originalName || url || `${type.toUpperCase()} Document`;
+  const initialUrl = url || originalName || "File upload";
+
+  // Check if source already exists in workspace
+  const existing = await Workspace.findOne({ workspaceId, userId, "sources.sourceId": sourceId });
+  if (existing) return existing;
+
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId },
+    {
+      $addToSet: {
+        sources: {
+          sourceId,
+          title: initialTitle,
+          sourceType: type,
+          sourceUrl: initialUrl,
+          status: "PENDING",
+          errorMessage: null,
+        },
+      },
+    },
+    { returnDocument: "after" }
+  );
+}
+
+/**
+ * Update the status and optional errorMessage of a source
+ */
+export async function updateSourceStatus(workspaceId, userId, sourceId, status, errorMessage = null) {
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId, "sources.sourceId": sourceId },
+    {
+      $set: {
+        "sources.$.status": status,
+        "sources.$.errorMessage": errorMessage,
+      },
+    },
+    { returnDocument: "after" }
+  );
+}
+
+/**
+ * 5. Persist source metadata into MongoDB Workspace collection & set status to COMPLETED
  */
 export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata) {
+  // First try updating existing source in sources array
+  const updated = await Workspace.findOneAndUpdate(
+    { workspaceId, userId, "sources.sourceId": sourceMetadata.sourceId },
+    {
+      $set: {
+        "sources.$.title": sourceMetadata.title,
+        "sources.$.sourceType": sourceMetadata.sourceType,
+        "sources.$.sourceUrl": sourceMetadata.sourceUrl,
+        "sources.$.cloudinaryUrl": sourceMetadata.cloudinaryUrl || null,
+        "sources.$.videoId": sourceMetadata.videoId || null,
+        "sources.$.status": "COMPLETED",
+        "sources.$.errorMessage": null,
+        "sources.$.indexedAt": new Date(),
+      },
+    },
+    { returnDocument: "after" }
+  );
+
+  if (updated) return updated;
+
+  // If source was not pre-created, push it directly with COMPLETED status
   return await Workspace.findOneAndUpdate(
     { workspaceId, userId },
     {
@@ -89,10 +157,12 @@ export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata)
           sourceUrl: sourceMetadata.sourceUrl,
           cloudinaryUrl: sourceMetadata.cloudinaryUrl || null,
           videoId: sourceMetadata.videoId || null,
+          status: "COMPLETED",
+          errorMessage: null,
         },
       },
     },
-    { returnDocument: 'after' }
+    { returnDocument: "after" }
   );
 }
 

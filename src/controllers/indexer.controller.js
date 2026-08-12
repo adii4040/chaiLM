@@ -1,10 +1,10 @@
-import { processAndIndexDocument } from "../services/indexer.service.js";
+import mongoose from "mongoose";
 import { inngest } from "../inngest/client.js";
+import { createPendingSource } from "../services/indexer.service.js";
 
 /**
  * Controller to handle document ingestion for PDFs, YouTube videos, and Websites.
  * Endpoint: POST /api/indexer
- * Optional Query Param: ?async=true (default: true) to queue background job via Inngest
  */
 export async function handleIndexDocument(req, res) {
   try {
@@ -37,10 +37,14 @@ export async function handleIndexDocument(req, res) {
       });
     }
 
+    // Pre-generate sourceId so that it is returned immediately
+    const sourceId = new mongoose.Types.ObjectId().toString();
+
     let payload = {
       type: normalizedType,
       workspaceId: workspaceId.trim(),
       userId,
+      sourceId,
     };
 
     // 4. Validate source-specific payload inputs
@@ -63,33 +67,23 @@ export async function handleIndexDocument(req, res) {
       });
     }
 
-    // Check if client explicitly requested synchronous processing (e.g. ?async=false)
-    const isAsync = req.query.async !== "false";
+    // Pre-create initial source in MongoDB with status PENDING
+    await createPendingSource(payload.workspaceId, userId, payload);
 
-    if (isAsync) {
-      console.log(`[Indexer Controller] Dispatching 'document/index.requested' event to Inngest queue for ${normalizedType}...`);
-      await inngest.send({
-        name: "document/index.requested",
-        data: payload,
-      });
+    console.log(`[Indexer Controller] Dispatching 'document/index.requested' event to Inngest queue for ${normalizedType}...`);
+    await inngest.send({
+      name: "document/index.requested",
+      data: payload,
+    });
 
-      return res.status(202).json({
-        message: "Document indexing job queued successfully",
-        data: {
-          workspaceId: payload.workspaceId,
-          type: normalizedType,
-          status: "processing",
-        },
-      });
-    }
-
-    // Fallback: Synchronous execution if ?async=false
-    console.log(`[Indexer Controller] Processing ${normalizedType} document synchronously for workspace: ${payload.workspaceId}`);
-    const result = await processAndIndexDocument(payload);
-
-    return res.status(200).json({
-      message: "Document successfully indexed",
-      data: result,
+    return res.status(202).json({
+      message: "Document indexing job queued successfully",
+      data: {
+        workspaceId: payload.workspaceId,
+        sourceId: payload.sourceId,
+        type: normalizedType,
+        status: "PENDING",
+      },
     });
   } catch (error) {
     console.error("Indexing Controller Error:", error);

@@ -11,6 +11,12 @@ const SourceSchema = new mongoose.Schema({
   sourceUrl: { type: String, required: true },
   cloudinaryUrl: { type: String, default: null },
   videoId: { type: String, default: null },
+  status: {
+    type: String,
+    enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+    default: "PENDING",
+  },
+  errorMessage: { type: String, default: null },
   indexedAt: { type: Date, default: Date.now },
 });
 

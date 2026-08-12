@@ -6,6 +6,7 @@ import {
   enrichChunks,
   embedDocuments,
   saveSourceToWorkspace,
+  updateSourceStatus,
 } from "../../services/indexer.service.js";
 
 /**
@@ -18,30 +19,45 @@ export const indexDocumentFunction = inngest.createFunction(
     name: "Index Document Ingestion Pipeline",
     retries: 3,
     triggers: [{ event: "document/index.requested" }],
+    onFailure: async ({ event, error }) => {
+      const originalData = event.data.event.data;
+      const { workspaceId, userId, sourceId } = originalData;
+      if (workspaceId && userId && sourceId) {
+        console.error(`[Inngest Failure] Marking source ${sourceId} as FAILED in workspace ${workspaceId}:`, error.message);
+        await updateSourceStatus(workspaceId, userId, sourceId, "FAILED", error.message);
+      }
+    },
   },
   async ({ event, step }) => {
-    const { workspaceId, userId, type, url, filePath, originalName } = event.data;
+    const { workspaceId, userId, type, url, filePath, originalName, sourceId } = event.data;
 
     // Step 1: Verify Workspace Existence
     await step.run("verify-workspace", async () => {
       return await verifyWorkspace(workspaceId, userId);
     });
 
-    // Step 2: Load, Scrap (Firecrawl/PDF/YouTube), & Chunk Document
+    // Step 2: Mark Source Status as PROCESSING in MongoDB
+    if (sourceId) {
+      await step.run("mark-status-processing", async () => {
+        return await updateSourceStatus(workspaceId, userId, sourceId, "PROCESSING");
+      });
+    }
+
+    // Step 3: Load, Scrap (Firecrawl/PDF/YouTube), & Chunk Document
     const docResult = await step.run("load-and-chunk-document", async () => {
       return await loadAndChunkDocument({ type, filePath, url, originalName });
     });
 
-    // Step 3: Embed Text & Upload Vectors to Qdrant
+    // Step 4: Embed Text & Upload Vectors to Qdrant
     const enrichedResult = await step.run("embed-and-upload-qdrant", async () => {
-      const sourceId = new mongoose.Types.ObjectId().toString();
-      const sourceData = { ...docResult, sourceId };
+      const finalSourceId = sourceId || new mongoose.Types.ObjectId().toString();
+      const sourceData = { ...docResult, sourceId: finalSourceId };
       const enriched = enrichChunks(docResult.chunks, event.data, sourceData);
       await embedDocuments(enriched);
-      return { sourceId, chunksIndexed: enriched.length };
+      return { sourceId: finalSourceId, chunksIndexed: enriched.length };
     });
 
-    // Step 4: Save Source Metadata into MongoDB Workspace
+    // Step 5: Save Source Metadata into MongoDB Workspace & set status to COMPLETED
     await step.run("save-source-mongodb", async () => {
       return await saveSourceToWorkspace(workspaceId, userId, {
         sourceId: enrichedResult.sourceId,
