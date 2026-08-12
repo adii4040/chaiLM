@@ -6,7 +6,7 @@ import { StructuredFinalResponseSchema } from "../../utils/responseSchema.utils.
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-export async function generateStructuredRAGResponse(userQuery, retrievedChunks) {
+export async function synthesizeAnswer(userQuery, retrievedChunks) {
   const fullSystemPrompt = buildPrompt(retrievedChunks);
 
   console.log('FINAL SYSTEM PROMPT: ', fullSystemPrompt);

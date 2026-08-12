@@ -3,7 +3,7 @@ import {
   translateQuery,
   generateHyDeDocument,
   rerankDocuments,
-  generateStructuredRAGResponse
+  synthesizeAnswer
 } from "./ai/index.js";
 import { reciprocalRankFusion } from "../utils/rrf.utils.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
@@ -235,7 +235,7 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
   const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank;
 
   // 9. Synthesize final structured response with citations
-  const parsedAnswer = await generateStructuredRAGResponse(query, finalChunks);
+  const parsedAnswer = await synthesizeAnswer(query, finalChunks);
 
   // 10. Format citations/sources with structured metadata & deep links
   const formattedSources = await formatSources(finalChunks);
