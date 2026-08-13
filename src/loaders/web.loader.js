@@ -6,14 +6,15 @@ import { config } from "../config/env.js";
 export async function scrapWebsite(url) {
   try {
     const scrapeResult = await firecrawlApp.scrape(url, { formats: ['markdown'] });
-    console.log("Scraped content successfully", scrapeResult)
-     const markdown = scrapeResult.markdown || scrapeResult.data?.markdown || "";
+    console.log("Scraped content successfully", scrapeResult);
+    const markdown = scrapeResult.markdown || scrapeResult.data?.markdown || "";
     console.log("[Web Processor] Scraped markdown content logged successfully.");
 
     const title = scrapeResult.metadata?.title || scrapeResult.data?.metadata?.title || url;
-    return {markdown, title}
+    return { markdown, title };
   } catch (error) {
-    console.log(error)
+    console.error("[Web Processor] Firecrawl Scraping Error:", error);
+    throw new Error(`Failed to scrape website content: ${error.message || error}`);
   }
 }
 

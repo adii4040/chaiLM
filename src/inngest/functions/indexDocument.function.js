@@ -7,6 +7,7 @@ import {
   embedDocuments,
   saveSourceToWorkspace,
   updateSourceStatus,
+  removeSourceFromWorkspace,
 } from "../../services/indexer.service.js";
 
 /**
@@ -23,8 +24,8 @@ export const indexDocumentFunction = inngest.createFunction(
       const originalData = event.data.event.data;
       const { workspaceId, userId, sourceId } = originalData;
       if (workspaceId && userId && sourceId) {
-        console.error(`[Inngest Failure] Marking source ${sourceId} as FAILED in workspace ${workspaceId}:`, error.message);
-        await updateSourceStatus(workspaceId, userId, sourceId, "FAILED", error.message);
+        console.error(`[Inngest Failure] Removing failed source ${sourceId} from workspace ${workspaceId}:`, error.message);
+        await removeSourceFromWorkspace(workspaceId, userId, sourceId);
       }
     },
   },

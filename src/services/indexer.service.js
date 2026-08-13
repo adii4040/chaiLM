@@ -122,6 +122,21 @@ export async function updateSourceStatus(workspaceId, userId, sourceId, status, 
 }
 
 /**
+ * Remove a failed source entry from the workspace sources array
+ */
+export async function removeSourceFromWorkspace(workspaceId, userId, sourceId) {
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId },
+    {
+      $pull: {
+        sources: { sourceId },
+      },
+    },
+    { returnDocument: "after" }
+  );
+}
+
+/**
  * 5. Persist source metadata into MongoDB Workspace collection & set status to COMPLETED
  */
 export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata) {

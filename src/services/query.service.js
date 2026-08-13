@@ -49,7 +49,7 @@ export async function getSourceFilters(workspaceDoc, selectedSourceIds = []) {
       const match = workspaceDoc.sources.find(
         (s) => s.sourceId === id || (s._id && s._id.toString() === id)
       );
-      return match ? [match.sourceUrl, match.sourceId || match._id?.toString()] : [id];
+      return match ? [match.sourceId || match._id?.toString()] : [id];
     }).filter(Boolean);
   }
   return targetSourceFilters;
@@ -210,7 +210,7 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
 
   // 3. Build source filtering conditions for the vector database query
   const sourceFilterCondition = targetSourceFilters.length > 0
-    ? [{ key: "metadata.sourceUrl", match: { any: targetSourceFilters } }]
+    ? [{ key: "metadata.sourceId", match: { any: targetSourceFilters } }]
     : [];
 
   // 4. Connect to Qdrant vector store
