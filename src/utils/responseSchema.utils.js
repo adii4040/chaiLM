@@ -56,3 +56,45 @@ export const StructuredFinalResponseSchema = z.object({
     .array(AnswerSectionSchema)
     .describe("NotebookLM-style source-by-source or topic-by-topic response breakdowns."),
 });
+
+// Studio Master Outline Extraction Schemas
+
+export const SegmentBatchSchema = z.object({
+  segments: z.array(
+    z.object({
+      rangeLabel: z.string().describe("Human readable location, e.g. 'Page 3' or '04:00-06:00'"),
+      rangeStart: z.number().describe("Starting range numerical coordinate"),
+      rangeEnd: z.number().describe("Ending range numerical coordinate"),
+      topicHint: z.string().describe("Short 2-4 word theme or topic of this segment"),
+      summary: z.string().describe("Comprehensive paragraph summary of this section's discussion"),
+      takeaways: z.array(z.string()).describe("Key granular takeaways, insights, or arguments"),
+      terms: z.array(
+        z.object({
+          term: z.string().describe("Key terminology or technical concept"),
+          definition: z.string().describe("Clear, concise definition as used in source"),
+        })
+      ),
+    })
+  ),
+});
+
+export const OutlineSchema = z.object({
+  chapters: z.array(
+    z.object({
+      chapterIndex: z.number().describe("Sequential 1-based index (1, 2, 3...)"),
+      chapterTitle: z.string().describe("Descriptive title for this chapter"),
+      includedSegmentIds: z.array(z.number()).describe("Array of sequential input segment IDs assigned to this chapter"),
+      rangeLabel: z.string().describe("Human-readable covered range, e.g. 'Pages 1-5' or '00:00-12:00'"),
+      rangeStart: z.number().describe("Starting numerical coordinate of this chapter (e.g., timestamp in seconds or page number)"),
+      rangeEnd: z.number().describe("Ending numerical coordinate of this chapter (e.g., timestamp in seconds or page number)"),
+      summary: z.string().describe("Synthesized chapter summary"),
+      takeaways: z.array(z.string()).describe("Deduplicated comprehensive list of key takeaways"),
+      terms: z.array(
+        z.object({
+          term: z.string(),
+          definition: z.string(),
+        })
+      ),
+    })
+  ),
+});

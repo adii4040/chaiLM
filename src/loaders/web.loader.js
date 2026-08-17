@@ -2,7 +2,6 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { firecrawlApp } from "../lib/index.js";
 import { config } from "../config/env.js";
 
-
 export async function scrapWebsite(url) {
   try {
     const scrapeResult = await firecrawlApp.scrape(url, { formats: ['markdown'] });
@@ -26,7 +25,7 @@ export async function scrapWebsite(url) {
 export async function processWeb(url) {
   try {
     const targetUrl = url || 'https://www.amazon.com';
-    const {markdown, title} = await scrapWebsite(targetUrl)
+    const { markdown, title } = await scrapWebsite(targetUrl);
 
     console.log("[Web Processor] Splitting scraped markdown into text chunks...");
     const splitter = new RecursiveCharacterTextSplitter({
@@ -49,4 +48,55 @@ export async function processWeb(url) {
     console.error("Web Processor Error:", error);
     throw new Error(`Failed to process website content: ${error.message}`);
   }
+}
+
+/**
+ * Normalizes scraped markdown into structural Units based on markdown headings (# or ##).
+ * Falls back to word-window chunks if no headings are present.
+ *
+ * @param {string} markdown - Scraped markdown string
+ * @param {string} [pageTitle] - Optional page title
+ * @param {number} [fallbackWords=500] - Word count fallback window
+ * @returns {{ units: Array, title: string }}
+ */
+export function getWebUnits(markdown, pageTitle = "Web Page", fallbackWords = 500) {
+  const cleanMd = (markdown || "").trim();
+  if (!cleanMd) {
+    return { units: [], title: pageTitle };
+  }
+
+  // Split on headings # or ## at start of line
+  const sections = cleanMd.split(/(?=(?:^|\n)#{1,2}\s)/).filter((s) => s.trim().length > 0);
+
+  if (sections.length > 1) {
+    const units = sections.map((sec, i) => {
+      const headingMatch = sec.match(/^#{1,2}\s+(.+)/m);
+      const rangeLabel = headingMatch ? headingMatch[1].trim() : `Section ${i + 1}`;
+      const text = sec.trim();
+      return {
+        text,
+        tokens: Math.ceil(text.length / 4),
+        rangeLabel,
+        rangeStart: i + 1,
+        rangeEnd: i + 1,
+      };
+    });
+    return { units, title: pageTitle };
+  }
+
+  // Fallback if no markdown headings are found
+  const words = cleanMd.split(/\s+/);
+  const units = [];
+  for (let i = 0; i < words.length; i += fallbackWords) {
+    const text = words.slice(i, i + fallbackWords).join(" ");
+    units.push({
+      text,
+      tokens: Math.ceil(text.length / 4),
+      rangeLabel: `Section ${units.length + 1}`,
+      rangeStart: units.length + 1,
+      rangeEnd: units.length + 1,
+    });
+  }
+
+  return { units, title: pageTitle };
 }

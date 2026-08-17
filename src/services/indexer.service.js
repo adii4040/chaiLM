@@ -74,7 +74,6 @@ export async function embedDocuments(enrichedChunks) {
   }
 }
 
-
 /**
  * Create an initial source record in MongoDB with PENDING status
  */
@@ -97,7 +96,9 @@ export async function createPendingSource(workspaceId, userId, sourcePayload) {
           sourceType: type,
           sourceUrl: initialUrl,
           status: "PENDING",
+          studioOutlineStatus: "PENDING",
           errorMessage: null,
+          studioOutlineError: null,
         },
       },
     },
@@ -175,6 +176,39 @@ export async function saveSourceToWorkspace(workspaceId, userId, sourceMetadata)
           status: "COMPLETED",
           errorMessage: null,
         },
+      },
+    },
+    { returnDocument: "after" }
+  );
+}
+
+/**
+ * Update the studioOutlineStatus and optional studioOutlineError of a source
+ */
+export async function updateStudioOutlineStatus(workspaceId, userId, sourceId, status, studioOutlineError = null) {
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId, "sources.sourceId": sourceId },
+    {
+      $set: {
+        "sources.$.studioOutlineStatus": status,
+        "sources.$.studioOutlineError": studioOutlineError,
+      },
+    },
+    { returnDocument: "after" }
+  );
+}
+
+/**
+ * Save the master studio outline and set studioOutlineStatus to COMPLETED
+ */
+export async function saveStudioOutline(workspaceId, userId, sourceId, outline) {
+  return await Workspace.findOneAndUpdate(
+    { workspaceId, userId, "sources.sourceId": sourceId },
+    {
+      $set: {
+        "sources.$.summaryOutline": outline,
+        "sources.$.studioOutlineStatus": "COMPLETED",
+        "sources.$.studioOutlineError": null,
       },
     },
     { returnDocument: "after" }
