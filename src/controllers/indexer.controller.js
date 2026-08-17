@@ -89,7 +89,7 @@ export async function handleIndexDocument(req, res) {
         sourceId: payload.sourceId,
         type: normalizedType,
         status: "PENDING",
-        studioOutlineStatus: "PENDING",
+        studioOutlineStatus: "NOT_STARTED",
       },
     });
 
