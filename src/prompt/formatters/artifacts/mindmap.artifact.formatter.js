@@ -29,8 +29,10 @@ export function formatMindMapPrompt({ sourceTitle, sourceType = "document", outl
     `You are tasked with structuring a clear, multi-level hierarchical Mind Map tree for "${sourceTitle}" (Workspace: "${workspaceTitle}").\n\n` +
     `MIND MAP HIERARCHY RULES:\n` +
     `1. Central Root Node: The \`rootNode.label\` must represent the core subject/document title.\n` +
-    `2. Primary Branches: Create primary branches corresponding to the major sections, themes, or architectural pillars.\n` +
-    `3. Sub-Branches: Under each primary branch, define specific sub-topics, components, or mechanisms.\n` +
+    `2. MANDATORY COVERAGE INVARIANT (Primary Branches):\n` +
+    `   - You MUST generate at least ONE primary branch for EVERY section/chapter in the input outline summary data (e.g. if there are ${chapters.length} sections, you must create ${chapters.length} primary branches).\n` +
+    `   - It is STRICTLY FORBIDDEN to output only 1 branch or terminate early. The primary branches MUST span the full scope of the outline from start to finish.\n` +
+    `3. Sub-Branches: Under each primary branch, define specific sub-topics, components, or mechanisms (minimum 2 to 4 sub-branches per primary branch).\n` +
     `4. Key Details: Under each sub-branch, provide 2 to 4 concise bullet points (\`keyDetails\`) containing concrete facts, definitions, or operational steps.\n` +
     `5. Visual Clarity: Keep node labels concise and scannable for graph/canvas rendering.\n\n` +
     `SOURCE MASTER OUTLINE & SUMMARY DATA:\n` +

@@ -34,12 +34,17 @@ export function formatQuizPrompt({ sourceTitle, sourceType = "document", outline
     `Target Number of Questions: ${targetCount}\n` +
     `Target Difficulty Level: ${targetDifficulty}\n\n` +
     `QUIZ QUESTION RULES:\n` +
-    `1. Coverage: Distribute questions across the entire document's sections/chapters so all major topics are assessed.\n` +
-    `2. Question Format: Provide 3 to 4 distinct, plausible answer choices in the \`options\` array for each question.\n` +
-    `3. Zero-based Answer Index: \`correctAnswerIndex\` MUST be the 0-based numerical index (0, 1, 2, or 3) corresponding to the correct answer choice in the \`options\` array.\n` +
-    `4. In-Depth Explanation: Every question MUST include an \`explanation\` field detailing why the correct choice is accurate and why the alternative distractors are incorrect.\n` +
-    `5. Plausible Distractors: Avoid silly or obvious wrong choices. Distractors should reflect common domain misconceptions or related adjacent terms.\n` +
-    `6. Source Reference: Set \`sourceReference\` to the relevant section or rangeLabel (e.g. "${chapters[0]?.rangeLabel || "Chapter 1"}").\n\n` +
+    `1. Full Outline Coverage: Distribute questions across ALL document sections/chapters so all major technical topics are assessed.\n` +
+    `2. STRICT TECHNICAL RIGOR RULE:\n` +
+    `   - FORBIDDEN: Do NOT create trivial quote-recall questions, generic soft-skill questions, or HR buzzword choices (e.g. 'What is a mindset?', 'Importance of learning', 'Growth mindset').\n` +
+    `   - REQUIRED: Focus 100% of questions on concrete software architecture, algorithm trade-offs, tool mechanics, system state patterns, and engineering principles.\n` +
+    `3. TECHNICAL ANALOGY QUESTION RULE:\n` +
+    `   - If domain analogies are used in the source (e.g. Brahma/Vishnu/Shiva for Event Sourcing), format the question to assess the software engineering mapping (e.g. "In the Event Sourcing architecture discussed, which phase corresponds to event creation and initial state logging?") rather than asking general religious trivia.\n` +
+    `4. Question Format: Provide 3 to 4 distinct, plausible answer choices in the \`options\` array for each question.\n` +
+    `5. Zero-based Answer Index: \`correctAnswerIndex\` MUST be the 0-based numerical index (0, 1, 2, or 3) corresponding to the correct answer choice in the \`options\` array.\n` +
+    `6. In-Depth Explanation: Every question MUST include an \`explanation\` field detailing why the correct choice is accurate and why the alternative distractors are incorrect.\n` +
+    `7. Plausible Technical Distractors: Avoid silly or obvious wrong choices. Distractors should reflect common software engineering misconceptions or related technical terms.\n` +
+    `8. Source Reference: Set \`sourceReference\` to the relevant section or rangeLabel (e.g. "${chapters[0]?.rangeLabel || "Chapter 1"}").\n\n` +
     `SOURCE MASTER OUTLINE & SUMMARY DATA:\n` +
     `Document: ${sourceTitle} (Type: ${sourceType})\n\n` +
     `${formattedChapters}`
