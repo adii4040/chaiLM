@@ -5,7 +5,7 @@ const StudioArtifactSchema = new mongoose.Schema(
     artifactId: { type: String, unique: true, index: true },
     workspaceId: { type: String, required: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    sourceId: { type: String, default: null, index: true }, // null for workspace-wide synthesis
+    sourceId: { type: String, default: null, index: true },
     type: {
       type: String,
       enum: ["flashcards", "quiz", "mindmap", "study_guide", "audio_overview"],

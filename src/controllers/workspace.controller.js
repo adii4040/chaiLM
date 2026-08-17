@@ -1,5 +1,5 @@
-import { Workspace } from "../models/Workspace.js";
-import { ChatMessage } from "../models/ChatMessage.js";
+import { Workspace } from "../models/Workspace.model.js";
+import { ChatMessage } from "../models/ChatMessage.model.js";
 
 /**
  * Controller to create a new workspace
