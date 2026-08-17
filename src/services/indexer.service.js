@@ -96,7 +96,7 @@ export async function createPendingSource(workspaceId, userId, sourcePayload) {
           sourceType: type,
           sourceUrl: initialUrl,
           status: "PENDING",
-          studioOutlineStatus: "PENDING",
+          studioOutlineStatus: "NOT_STARTED",
           errorMessage: null,
           studioOutlineError: null,
         },
