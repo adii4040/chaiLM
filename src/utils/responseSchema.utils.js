@@ -98,3 +98,84 @@ export const OutlineSchema = z.object({
     })
   ),
 });
+
+//Artificates schema
+
+export const StudyGuideSchema = z.object({
+  title: z.string().describe("Title of the study guide"),
+  executiveSummary: z.string().describe("High-level executive overview synthesizing the entire source or workspace"),
+  keyThemes: z.array(
+    z.object({
+      themeTitle: z.string().describe("Name of the core theme or domain topic"),
+      overview: z.string().describe("Detailed narrative explanation of this theme"),
+      keyPoints: z.array(z.string()).describe("Core takeaways, methodologies, or architectural guidelines"),
+    })
+  ).describe("Structured thematic modules covering the material"),
+  glossary: z.array(
+    z.object({
+      term: z.string().describe("Specialized terminology or acronym"),
+      definition: z.string().describe("Precise, context-aware definition"),
+    })
+  ).describe("Comprehensive glossary of domain terms"),
+  keyTakeaways: z.array(z.string()).describe("Essential high-level summary points"),
+  reviewChecklist: z.array(z.string()).describe("Actionable review items or self-assessment questions to test comprehension"),
+});
+
+export const FlashcardDeckSchema = z.object({
+  deckTitle: z.string().describe("Title of the flashcard deck"),
+  cards: z.array(
+    z.object({
+      id: z.number().describe("Sequential card index (1, 2, 3...)"),
+      front: z.string().describe("Question, concept name, or prompt on the front of the card"),
+      back: z.string().describe("Clear, concise, and accurate answer or explanation on the back"),
+      hint: z.string().describe("Subtle memory cue or clue to assist recall"),
+      sourceReference: z.string().describe("Chapter, page range, or timestamp reference (e.g. 'Pages 4-6' or '17:53')"),
+      difficulty: z.enum(["easy", "medium", "hard"]).describe("Assessed difficulty of the concept"),
+    })
+  ).describe("Array of flashcards"),
+});
+
+export const QuizSchema = z.object({
+  quizTitle: z.string().describe("Title of the quiz"),
+  questions: z.array(
+    z.object({
+      id: z.number().describe("Sequential question index (1, 2, 3...)"),
+      question: z.string().describe("Clear, unambiguous question text"),
+      options: z.array(z.string()).min(2).max(4).describe("Array of 2 to 4 distinct answer choices"),
+      correctAnswerIndex: z.number().describe("0-based index pointing to the correct option in the options array"),
+      explanation: z.string().describe("Detailed reasoning explaining why the correct answer is right and others are wrong"),
+      sourceReference: z.string().describe("Chapter, page range, or timestamp reference (e.g. 'Pages 43-54')"),
+    })
+  ).describe("Array of quiz questions"),
+});
+
+export const MindMapSchema = z.object({
+  mapTitle: z.string().describe("Title of the mind map"),
+  rootNode: z.object({
+    label: z.string().describe("Central root concept or document title"),
+    branches: z.array(
+      z.object({
+        label: z.string().describe("Primary topic branch (e.g. Chapter / Core Theme)"),
+        subBranches: z.array(
+          z.object({
+            label: z.string().describe("Subtopic or technical subcategory"),
+            keyDetails: z.array(z.string()).describe("Key bullet points, components, or examples"),
+          })
+        ),
+      })
+    ),
+  }),
+});
+
+export const AudioOverviewSchema = z.object({
+  episodeTitle: z.string().describe("Engaging title for the podcast episode"),
+  summary: z.string().describe("Short synopsis of the episode"),
+  durationMinutesEstimate: z.number().describe("Estimated spoken duration in minutes"),
+  dialogue: z.array(
+    z.object({
+      speaker: z.enum(["Host 1", "Host 2"]).describe("Speaker identifier"),
+      text: z.string().describe("Spoken dialogue utterance"),
+      tone: z.string().describe("Vocal direction or tone, e.g. 'enthusiastic', 'inquisitive', 'analytical'"),
+    })
+  ).describe("Turn-by-turn conversational podcast transcript"),
+});
