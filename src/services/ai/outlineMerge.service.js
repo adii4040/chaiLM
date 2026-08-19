@@ -56,11 +56,25 @@ export function preMergeCollidingSegments(segments, overlapThreshold = 0.5) {
         }
       }
 
+      const existingEntities = new Set((prev.keyEntities || []).map((e) => e.entity.toLowerCase()));
+      for (const e of seg.keyEntities || []) {
+        if (!existingEntities.has(e.entity.toLowerCase())) {
+          prev.keyEntities = prev.keyEntities || [];
+          prev.keyEntities.push(e);
+          existingEntities.add(e.entity.toLowerCase());
+        }
+      }
+
       if (seg.topicHint && !prev.topicHint.toLowerCase().includes(seg.topicHint.toLowerCase())) {
         prev.topicHint = `${prev.topicHint} & ${seg.topicHint}`;
       }
     } else {
-      merged.push({ ...seg, takeaways: [...(seg.takeaways || [])], terms: [...(seg.terms || [])] });
+      merged.push({
+        ...seg,
+        keyEntities: [...(seg.keyEntities || [])],
+        takeaways: [...(seg.takeaways || [])],
+        terms: [...(seg.terms || [])],
+      });
     }
   }
 
@@ -80,7 +94,8 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     return { chapters: [] };
   }
 
-  const modelName = config.openai.chatModel || "gpt-4o-mini";
+  const modelName = config.openai.outlineModel || "gpt-4o";
+
 
   // 1. Programmatically collapse boundary overlap collisions
   const rawCleanSegments = preMergeCollidingSegments(segments);
@@ -95,13 +110,14 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
 
   const groupingGuidance = isPage
     ? "DOCUMENT / PDF GROUPING RULES:\n" +
-      "- Group approximately 8 to 15 pages into ONE comprehensive section (e.g. Pages 1-10, Pages 11-22, etc.).\n" +
-      "- Do NOT output tiny 1-page or 2-page chapters. Each section must group multiple segments together into a cohesive ~10-page thematic block.\n" +
+      "- Group approximately 6 to 12 pages into ONE comprehensive section (e.g. Pages 1-8, Pages 9-18, etc.).\n" +
+      "- Do NOT output tiny 1-page chapters or giant 50-page blobs. Each section must group logically related segments into a cohesive thematic block.\n" +
       "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
-      "- Target approximately 8 to 15 total sections for a large document (100-150 pages), or 2 to 5 sections for short documents (10-30 pages)."
+      "- Target approximately 8 to 15 total sections for a large document (100-150 pages), or 3 to 6 sections for short documents (10-30 pages)."
     : "AUDIO / VIDEO GROUPING RULES:\n" +
-      "- Group segments into balanced 8 to 15 minute thematic chapters.\n" +
-      "- Do NOT output 1-minute micro-chapters or 40-minute mega-chapters. Target 4 to 8 cohesive chapters for a 1-hour stream.";
+      "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
+      "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
+      "- Target 4 to 7 focused chapters for a 20-30 minute video, and 5 to 9 chapters for a 1-hour stream.";
 
   console.log(`[Studio Outline Merge] Reconciling ${cleanSegments.length} deduplicated segment(s) (down from ${segments.length} raw) for "${documentTitle}" (${isPage ? "PDF/Document" : "Media/Audio"})...`);
 
@@ -113,26 +129,29 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
         {
           role: "system",
           content:
-            "You are an expert editorial curator and document architect across all fields of study, technology, business, and literature.\n" +
+            "You are an expert editorial curator and document architect across all fields of study, technology, narrative, business, and literature.\n" +
             "You are given a chronological sequence of extracted document segments from a multi-batch pipeline, each labeled with a unique `segmentId` (1 to " + cleanSegments.length + ").\n" +
             "Your task is to organize these segments into an outline of coherent, well-proportioned, beautifully structured sections.\n\n" +
             "MANDATORY ALL-SEGMENT COVERAGE INVARIANT:\n" +
             "1. EVERY SINGLE `segmentId` from 1 to " + cleanSegments.length + " MUST be included in the `includedSegmentIds` array of exactly one section.\n" +
             "2. It is STRICTLY FORBIDDEN to drop, skip, or omit any segment. The sections must collectively cover all segments from Segment 1 to Segment " + cleanSegments.length + ".\n\n" +
             groupingGuidance + "\n\n" +
-            "SYNTHESIS RULES:\n" +
-            "- Group adjacent segments into the same section to synthesize a broad, rich summary for that entire page block or time window.\n" +
-            "- Preserve every unique argument, critique, analogy, framework, and concrete takeaway from the input segments in the section takeaways.\n" +
-            "- Deduplicate vocabulary terms across merged segments, retaining the clearest definitions.\n" +
-            "- Ensure sequential `chapterIndex` (1, 2, 3...).",
+            "STRICT SYNTHESIS & LOSSLESS PRESERVATION RULES:\n" +
+            "1. FULL UNION OF TAKEAWAYS: When merging segments into a section, you MUST preserve all unique assertions, plot developments, character actions, arguments, formulas, and technical takeaways from the input segments. Do NOT discard granular points to make the list short.\n" +
+            "2. EXACT ATTRIBUTION FIDELITY: Inspect the `keyEntities` and explicit subject attributions in each segment. Never alter, guess, or re-attribute which character/entity did what. Maintain 100% fidelity to the entity bindings established in the input segments.\n" +
+            "3. RICH NARRATIVE SUMMARY: Write a comprehensive, multi-sentence paragraph summary for each chapter that chronologically covers every constituent segment.\n" +
+            "4. DEDUPLICATED GLOSSARY: Deduplicate vocabulary terms across merged segments, retaining the clearest and most precise definitions.\n" +
+            "5. SEQUENTIAL INDEX: Ensure sequential `chapterIndex` (1, 2, 3...).",
         },
         {
           role: "user",
-          content: `Document Title: ${documentTitle}\n\nTotal Segments to Assign: ${cleanSegments.length}\n\nExtracted Segments JSON (Chronological Order):\n${JSON.stringify(cleanSegments, null, 2)}`,
+          content: `Document Title: ${documentTitle}\n\nTotal Segments to Assign: ${cleanSegments.length}\n\nExtracted Segments JSON (Chronological Order with Key Entities & Takeaways):\n${JSON.stringify(cleanSegments, null, 2)}`,
         },
       ],
       response_format: zodResponseFormat(OutlineSchema, "master_outline"),
     });
+
+
 
 
     const parsed = completion.choices[0].message.parsed;

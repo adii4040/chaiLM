@@ -45,8 +45,8 @@ export const extractStudioOutlineFunction = inngest.createFunction(
         return { chapters: [] };
       }
 
-      const tokenBudget = (type === "youtube" || type === "audio") ? 4000 : 7000;
-      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with budget ${tokenBudget} tokens...`);
+      const tokenBudget = (type === "youtube" || type === "audio") ? 2000 : 3500;
+      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with high-density budget ${tokenBudget} tokens...`);
       const batches = createBatches(units, tokenBudget);
 
 

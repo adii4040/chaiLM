@@ -66,12 +66,18 @@ export const SegmentBatchSchema = z.object({
       rangeStart: z.number().describe("Starting range numerical coordinate"),
       rangeEnd: z.number().describe("Ending range numerical coordinate"),
       topicHint: z.string().describe("Short 2-4 word theme or topic of this segment"),
-      summary: z.string().describe("Comprehensive paragraph summary of this section's discussion"),
-      takeaways: z.array(z.string()).describe("Key granular takeaways, insights, or arguments"),
+      summary: z.string().describe("Comprehensive paragraph summary of this section's discussion with strict factual grounding and entity attribution"),
+      keyEntities: z.array(
+        z.object({
+          entity: z.string().describe("Exact name of the person, character, dragon, model, tool, or institution explicitly mentioned"),
+          roleOrAction: z.string().describe("Their exact action, allegiance, ownership, or status explicitly stated in this slice"),
+        })
+      ).describe("All distinct actors, figures, or entities active in this slice with their exact actions/roles"),
+      takeaways: z.array(z.string()).describe("Granular takeaways with explicit subject attribution (e.g. 'Entity/Subject: Exact action, insight, or finding')"),
       terms: z.array(
         z.object({
-          term: z.string().describe("Key terminology or technical concept"),
-          definition: z.string().describe("Clear, concise definition as used in source"),
+          term: z.string().describe("Key terminology, lore entity, or technical concept"),
+          definition: z.string().describe("Clear, concise definition as used strictly in source context"),
         })
       ),
     })
@@ -87,8 +93,8 @@ export const OutlineSchema = z.object({
       rangeLabel: z.string().describe("Human-readable covered range, e.g. 'Pages 1-5' or '00:00-12:00'"),
       rangeStart: z.number().describe("Starting numerical coordinate of this chapter (e.g., timestamp in seconds or page number)"),
       rangeEnd: z.number().describe("Ending numerical coordinate of this chapter (e.g., timestamp in seconds or page number)"),
-      summary: z.string().describe("Synthesized chapter summary"),
-      takeaways: z.array(z.string()).describe("Deduplicated comprehensive list of key takeaways"),
+      summary: z.string().describe("Synthesized chapter summary with strict factual grounding and correct entity attribution"),
+      takeaways: z.array(z.string()).describe("Deduplicated comprehensive list of key takeaways with explicit subject attribution"),
       terms: z.array(
         z.object({
           term: z.string(),
@@ -98,6 +104,7 @@ export const OutlineSchema = z.object({
     })
   ),
 });
+
 
 //Artificates schema
 

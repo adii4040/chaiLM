@@ -12,8 +12,11 @@ export const config = {
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
+    chatModel: process.env.CHAT_MODEL || "gpt-4o-mini",
+    outlineModel: process.env.OUTLINE_MODEL || "gpt-4o",
     embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
   },
+
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
   },

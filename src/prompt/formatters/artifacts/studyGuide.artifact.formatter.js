@@ -28,14 +28,15 @@ export function formatStudyGuidePrompt({ sourceTitle, sourceType = "document", o
     `STUDY GUIDE GENERATION DIRECTIVE:\n` +
     `You are tasked with synthesizing an authoritative, structured, and comprehensive Study Guide for "${sourceTitle}" (Workspace: "${workspaceTitle}").\n\n` +
     `GUIDELINES & RULES:\n` +
-    `1. Executive Summary: Write a high-level, clear overview capturing the fundamental thesis, background, and goals of the material.\n` +
+    `1. Executive Summary: Write a high-level, clear overview capturing the fundamental thesis, core events/arguments, and takeaways of the material.\n` +
     `2. Key Themes (Full Coverage): Group the material into logical, thematic modules covering EVERY section/chapter in the input outline summary data. Each theme must have a descriptive title, a thorough narrative overview, and bulleted key points.\n` +
-    `3. High-Yield Technical Glossary:\n` +
-    `   - Include ONLY software engineering, computer science, technical architecture, API, tool, framework, algorithm, and design pattern vocabulary.\n` +
-    `   - STRICTLY FORBIDDEN: Do NOT include generic conversational words or plain English phrases (e.g. 'mindset', 'practical experience', 'trade-offs', 'pre-enrollment', 'existential crisis').\n` +
-    `   - ANALOGY TRANSLATION RULE: If cultural or philosophical analogies are present in the source (e.g. Brahma/Vishnu/Shiva for Event Sourcing), define them strictly in terms of their technical computer science mapping (e.g. State Creation, State Maintenance, State Mutation/Deletion) rather than literal dictionary entries.\n` +
-    `4. Key Takeaways: Provide high-impact summary bullets highlighting the essential technical conclusions, principles, or methodologies.\n` +
-    `5. Review Checklist: Create actionable self-assessment questions to test deep technical comprehension.\n\n` +
+    `3. High-Yield Domain Glossary:\n` +
+    `   - Include ONLY domain-specific technical terms, specialized vocabulary, algorithms, named entities, key figures, or core concepts.\n` +
+    `   - STRICTLY FORBIDDEN: Do NOT include generic conversational words or plain dictionary phrases (e.g. 'mindset', 'practical experience', 'trade-offs', 'pre-enrollment', 'struggle').\n` +
+    `   - ANALOGY & METAPHOR RULE: If analogies or metaphors are present, define them strictly in terms of their contextual meaning within the subject matter.\n` +
+    `4. Key Takeaways: Provide high-impact summary bullets highlighting the essential conclusions, principles, revelations, or findings.\n` +
+    `5. Review Checklist: Create actionable self-assessment questions to test deep comprehension of the subject matter.\n\n` +
+
     `SOURCE MASTER OUTLINE & SUMMARY DATA:\n` +
     `Document: ${sourceTitle} (Type: ${sourceType})\n\n` +
     `${formattedChapters}`

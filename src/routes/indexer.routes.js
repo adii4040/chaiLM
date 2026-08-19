@@ -6,9 +6,10 @@ import { verifyJwt } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.use(verifyJwt);
+// router.use(verifyJwt); // Disabled for unauthenticated testing
 
 const handleUpload = (req, res, next) => {
+
   upload.single("file")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {

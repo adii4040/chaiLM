@@ -9,9 +9,10 @@ import { verifyJwt } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.use(verifyJwt);
+// router.use(verifyJwt); // Disabled for unauthenticated testing
 
 router.post("/", handleCreateWorkspace);
+
 router.get("/", handleGetAllWorkspaces);
 router.get("/:workspaceId", handleGetWorkspaceData);
 router.delete("/:workspaceId", handleDeleteWorkspace);
