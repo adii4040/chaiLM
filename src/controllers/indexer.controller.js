@@ -70,11 +70,17 @@ export async function handleIndexDocument(req, res) {
     // Pre-create initial source in MongoDB with status PENDING
     await createPendingSource(payload.workspaceId, userId, payload);
 
-    console.log(`[Indexer Controller] Dispatching 'document/index.requested' event to Inngest queue for ${normalizedType}...`);
-    await inngest.send({
-      name: "document/index.requested",
-      data: payload,
-    });
+    console.log(`[Indexer Controller] Dispatching indexing & studio outline events to Inngest queue for ${normalizedType}...`);
+    await inngest.send([
+      {
+        name: "document/index.requested",
+        data: payload,
+      },
+      {
+        name: "studio/outline.requested",
+        data: payload,
+      },
+    ]);
 
     return res.status(202).json({
       message: "Document indexing job queued successfully",
@@ -83,8 +89,10 @@ export async function handleIndexDocument(req, res) {
         sourceId: payload.sourceId,
         type: normalizedType,
         status: "PENDING",
+        studioOutlineStatus: "NOT_STARTED",
       },
     });
+
   } catch (error) {
     console.error("Indexing Controller Error:", error);
     const statusCode = error.statusCode || 500;

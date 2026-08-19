@@ -31,8 +31,7 @@ function chunkTranscriptWithTimestamps(transcript, { chunkSize = 800, overlapSeg
         startSeconds: Math.floor(currentSegments[0].start || 0),
       });
 
-      // Carry the last few segments forward as overlap, same idea as
-      // RecursiveCharacterTextSplitter carrying whole lines forward
+      // Carry the last few segments forward as overlap
       currentSegments = currentSegments.slice(-overlapSegments);
       currentLength = currentSegments.reduce((sum, s) => sum + s.text.length, 0);
     }
@@ -107,5 +106,111 @@ export async function processYouTube(youtubeUrl) {
       throw new Error(`Transcript API Error (${statusCode}): ${apiErrorMessage}`);
     }
     throw error;
+  }
+}
+
+/**
+ * Fetches raw transcript entries from transcript API
+ * @param {string} youtubeUrl
+ * @returns {Promise<{ transcript: Array, metadata: Object, videoId: string }>}
+ */
+export async function fetchRawYouTubeTranscript(youtubeUrl) {
+  const videoId = extractVideoId(youtubeUrl);
+  try {
+    const response = await axios.get("https://transcriptapi.com/api/v2/youtube/transcript", {
+      params: {
+        video_url: videoId,
+        format: "json",
+        send_metadata: "true",
+      },
+      headers: {
+        Authorization: `Bearer ${config.transcriptApi.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const { transcript, metadata } = response.data;
+    if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
+      throw new Error("No transcript available for this video");
+    }
+
+    return { transcript, metadata: metadata || {}, videoId };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const statusCode = error.response?.status;
+      const apiErrorMessage = error.response?.data?.message || error.message;
+      throw new Error(`Transcript API Error (${statusCode}): ${apiErrorMessage}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Normalizes YouTube transcript into structural Units (~120s windows).
+ *
+ * @param {string|Array} input - YouTube URL or raw transcript array
+ * @param {number} [windowSeconds=120] - Window duration in seconds
+ * @returns {Promise<{ units: Array, title: string, videoId: string }>}
+ */
+export async function getYoutubeUnits(input, windowSeconds = 120) {
+  let transcript = [];
+  let title = "YouTube Video";
+  let videoId = "";
+
+  if (Array.isArray(input)) {
+    transcript = input;
+  } else if (typeof input === "string") {
+    const res = await fetchRawYouTubeTranscript(input);
+    transcript = res.transcript;
+    title = res.metadata?.title || "YouTube Video";
+    videoId = res.videoId;
+  } else {
+    throw new Error("Invalid input provided to getYoutubeUnits: expected YouTube URL or transcript array");
+  }
+
+  const units = [];
+  let cur = { text: "", start: null, end: null };
+
+  const formatTs = (sec) => {
+    const s = Math.floor(sec || 0);
+    const m = Math.floor(s / 60);
+    const remSec = s % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(m)}:${pad(remSec)}`;
+  };
+
+  for (const entry of transcript) {
+    const entryStart = typeof entry.start === "number" ? entry.start : (typeof entry.offset === "number" ? entry.offset : 0);
+    const entryDuration = typeof entry.duration === "number" ? entry.duration : 0;
+    const entryText = (entry.text || "").trim();
+
+    if (!entryText) continue;
+
+    if (cur.start === null) cur.start = entryStart;
+    cur.text += (cur.text ? " " : "") + entryText;
+    cur.end = entryStart + entryDuration;
+
+    if (cur.end - cur.start >= windowSeconds) {
+      units.push(toUnit(cur));
+      cur = { text: "", start: null, end: null };
+    }
+  }
+
+  if (cur.text) {
+    units.push(toUnit(cur));
+  }
+
+  return { units, title, videoId };
+
+  function toUnit(c) {
+    const startSec = Math.floor(c.start || 0);
+    const endSec = Math.floor(c.end || startSec);
+    return {
+      text: c.text.trim(),
+      tokens: Math.ceil(c.text.length / 4),
+      rangeLabel: `${formatTs(startSec)}-${formatTs(endSec)}`,
+      rangeStart: startSec,
+      rangeEnd: endSec,
+    };
   }
 }

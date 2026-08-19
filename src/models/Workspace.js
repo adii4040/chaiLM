@@ -18,7 +18,36 @@ const SourceSchema = new mongoose.Schema({
   },
   errorMessage: { type: String, default: null },
   indexedAt: { type: Date, default: Date.now },
+
+  // Studio Outline State (Decoupled from Chat Q&A status)
+  studioOutlineStatus: {
+    type: String,
+    enum: ["NOT_STARTED", "PROCESSING", "COMPLETED", "FAILED"],
+    default: "NOT_STARTED",
+  },
+  studioOutlineError: { type: String, default: null },
+  summaryOutline: {
+    chapters: [
+      {
+        chapterIndex: { type: Number },
+        chapterTitle: { type: String },
+        rangeLabel: { type: String },
+        rangeStart: { type: Number },
+        rangeEnd: { type: Number },
+        summary: { type: String },
+        takeaways: [{ type: String }],
+        terms: [
+          {
+            term: { type: String },
+            definition: { type: String },
+          },
+        ],
+      },
+    ],
+  },
 });
+
+
 
 SourceSchema.pre("save", function () {
   if (!this.sourceId) {
