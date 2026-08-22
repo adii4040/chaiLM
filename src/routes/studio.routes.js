@@ -14,7 +14,7 @@ import {
 
 const router = Router();
 
-// router.use(verifyJwt); // Disabled for easy testing
+router.use(verifyJwt);
 
 // Studio Artifact Retrieval & Management
 
