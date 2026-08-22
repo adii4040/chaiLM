@@ -20,6 +20,7 @@ const uploadOnCloudinary = async (localfilePath) => {
         return null;
     }
 
+    let isSuccess = false;
     try {
         const uploadResponse = await cloudinary.uploader.upload(localfilePath, {
             secure: true,
@@ -29,17 +30,20 @@ const uploadOnCloudinary = async (localfilePath) => {
             unique_filename: false,
         });
 
+        isSuccess = true;
         return uploadResponse;
     } catch (error) {
-        console.error(`Cloudinary Upload Unsuccessful: ${error}`);
+        console.error(`[Cloudinary Upload Unsuccessful for ${localfilePath}]:`, error);
         return null;
     } finally {
-        // Always attempt to delete local temporary upload.
-        try {
-            await fs.unlink(localfilePath);
-        } catch (unlinkError) {
-            if (unlinkError?.code !== 'ENOENT') {
-                console.log(`Could not delete temporary file ${localfilePath}: ${unlinkError.message}`);
+        // Only delete local temporary file if upload was successful so retries have access to the file
+        if (isSuccess) {
+            try {
+                await fs.unlink(localfilePath);
+            } catch (unlinkError) {
+                if (unlinkError?.code !== 'ENOENT') {
+                    console.log(`Could not delete temporary file ${localfilePath}: ${unlinkError.message}`);
+                }
             }
         }
     }

@@ -1,19 +1,18 @@
-import { Workspace } from "../models/Workspace.js";
-import { ChatMessage } from "../models/ChatMessage.js";
+import mongoose from "mongoose";
+import { Workspace } from "../models/Workspace.model.js";
+import { ChatMessage } from "../models/ChatMessage.model.js";
+
+const DEFAULT_TEST_USER_ID = new mongoose.Types.ObjectId("6a6a422aae65f98e696535e9");
 
 /**
  * Controller to create a new workspace
  * Endpoint: POST /api/workspace
- * Request body: { title: string }
+ * Request body: { title: string, userId?: string }
  */
 export async function handleCreateWorkspace(req, res) {
   try {
     const { title } = req.body;
-    const userId = req.user?._id;
-
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized user" });
-    }
+    const userId = req.user?._id || req.body.userId || DEFAULT_TEST_USER_ID;
 
     if (!title || typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: "Title is required to create a workspace" });
@@ -58,13 +57,12 @@ export async function handleGetWorkspaceData(req, res) {
       return res.status(400).json({ error: "Workspace ID is required" });
     }
 
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized user" });
-    }
+    const query = { workspaceId };
+    if (userId) query.userId = userId;
 
     const [workspaceDoc, chatHistory] = await Promise.all([
-      Workspace.findOne({ workspaceId, userId }),
-      ChatMessage.find({ workspaceId, userId }).sort({ createdAt: 1 }),
+      Workspace.findOne(query),
+      ChatMessage.find(query).sort({ createdAt: 1 }),
     ]);
 
     if (!workspaceDoc) {
@@ -80,6 +78,9 @@ export async function handleGetWorkspaceData(req, res) {
       errorMessage: s.errorMessage || null,
       cloudinaryUrl: s.cloudinaryUrl || null,
       videoId: s.videoId || null,
+      studioOutlineStatus: s.studioOutlineStatus || "NOT_STARTED",
+      studioOutlineError: s.studioOutlineError || null,
+      summaryOutline: s.summaryOutline || null,
       indexedAt: s.indexedAt,
     }));
 
@@ -114,12 +115,9 @@ export async function handleGetWorkspaceData(req, res) {
 export async function handleGetAllWorkspaces(req, res) {
   try {
     const userId = req.user?._id;
+    const query = userId ? { userId } : {};
 
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized user" });
-    }
-
-    const workspaces = await Workspace.find({ userId })
+    const workspaces = await Workspace.find(query)
       .select("workspaceId title sources createdAt updatedAt")
       .sort({ updatedAt: -1 });
 
@@ -136,6 +134,7 @@ export async function handleGetAllWorkspaces(req, res) {
         errorMessage: s.errorMessage || null,
         cloudinaryUrl: s.cloudinaryUrl || null,
         videoId: s.videoId || null,
+        studioOutlineStatus: s.studioOutlineStatus || "NOT_STARTED",
         indexedAt: s.indexedAt,
       })),
       createdAt: ws.createdAt,
@@ -167,18 +166,17 @@ export async function handleDeleteWorkspace(req, res) {
       return res.status(400).json({ error: "Workspace ID is required" });
     }
 
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized user" });
-    }
+    const query = { workspaceId };
+    if (userId) query.userId = userId;
 
-    const workspaceDoc = await Workspace.findOne({ workspaceId, userId });
+    const workspaceDoc = await Workspace.findOne(query);
     if (!workspaceDoc) {
       return res.status(404).json({ error: "Workspace not found" });
     }
 
     await Promise.all([
-      Workspace.deleteOne({ workspaceId, userId }),
-      ChatMessage.deleteMany({ workspaceId, userId }),
+      Workspace.deleteOne(query),
+      ChatMessage.deleteMany(query),
     ]);
 
     return res.status(200).json({
@@ -192,3 +190,4 @@ export async function handleDeleteWorkspace(req, res) {
     });
   }
 }
+
