@@ -94,7 +94,7 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     return { chapters: [] };
   }
 
-  const modelName = config.openai.outlineModel || "gpt-4o";
+  const modelName = config.openai.outlineModel || "gpt-5-mini";
 
 
   // 1. Programmatically collapse boundary overlap collisions
@@ -124,7 +124,6 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
   try {
     const completion = await openai.chat.completions.parse({
       model: modelName,
-      temperature: 0.1,
       messages: [
         {
           role: "system",
@@ -141,7 +140,9 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
             "2. EXACT ATTRIBUTION FIDELITY: Inspect the `keyEntities` and explicit subject attributions in each segment. Never alter, guess, or re-attribute which character/entity did what. Maintain 100% fidelity to the entity bindings established in the input segments.\n" +
             "3. RICH NARRATIVE SUMMARY: Write a comprehensive, multi-sentence paragraph summary for each chapter that chronologically covers every constituent segment.\n" +
             "4. DEDUPLICATED GLOSSARY: Deduplicate vocabulary terms across merged segments, retaining the clearest and most precise definitions.\n" +
-            "5. SEQUENTIAL INDEX: Ensure sequential `chapterIndex` (1, 2, 3...).",
+            "5. SEQUENTIAL INDEX: Ensure sequential `chapterIndex` (1, 2, 3...).\n\n" +
+            "LANGUAGE NORMALIZATION:\n" +
+            "Regardless of the language of the source content, all output (summaries, takeaways, terms, topicHint, chapterTitle) must be written entirely in English. Transliterate or translate any names, places, and terminology from the source language into their standard English spellings or accepted English equivalents. Do not mix scripts or languages within a single output field — every word must be in English, even when extracting from a non-English source.",
         },
         {
           role: "user",

@@ -18,7 +18,7 @@ export async function extractBatchSegments(batches, concurrency = 5) {
   }
 
   const limit = pLimit(concurrency);
-  const modelName = config.openai.outlineModel || "gpt-4o";
+  const modelName = config.openai.outlineModel || "gpt-5-mini";
 
   console.log(`[Studio Outline Extractor] Extracting segments using model '${modelName}' from ${batches.length} batch(es) with concurrency limit = ${concurrency}...`);
 
@@ -29,7 +29,6 @@ export async function extractBatchSegments(batches, concurrency = 5) {
       try {
         const completion = await openai.chat.completions.parse({
           model: modelName,
-          temperature: 0.1,
           messages: [
             {
               role: "system",
@@ -48,7 +47,9 @@ export async function extractBatchSegments(batches, concurrency = 5) {
                 "5. ACCURATE COORDINATES: For each segment, provide the accurate `rangeStart` and `rangeEnd` numerical coordinates and human-readable `rangeLabel` corresponding to that segment's exact slice boundaries.\n" +
                 "6. DENSE TAKEAWAYS: For each segment, provide 4-8 specific, granular takeaway points capturing the actual assertions, events, steps, arguments, or insights presented.\n" +
                 "7. DOMAIN TERMINOLOGY: Extract all specialized terminology, jargon, theories, metaphors, or named entities introduced in the text with precise definitions as used in context.\n" +
-                "8. TOPIC HINT: Provide a 2-5 word descriptive label capturing the core theme of the segment.",
+                "8. TOPIC HINT: Provide a 2-5 word descriptive label capturing the core theme of the segment.\n\n" +
+                "LANGUAGE NORMALIZATION:\n" +
+                "Regardless of the language of the source content, all output (summaries, takeaways, terms, topicHint, chapterTitle) must be written entirely in English. Transliterate or translate any names, places, and terminology from the source language into their standard English spellings or accepted English equivalents. Do not mix scripts or languages within a single output field — every word must be in English, even when extracting from a non-English source.",
             },
             {
               role: "user",
