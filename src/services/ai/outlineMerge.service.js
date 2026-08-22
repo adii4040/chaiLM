@@ -110,12 +110,14 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
 
   const groupingGuidance = isPage
     ? "DOCUMENT / PDF GROUPING RULES:\n" +
-      "- Group approximately 6 to 12 pages into ONE comprehensive section (e.g. Pages 1-8, Pages 9-18, etc.).\n" +
-      "- Do NOT output tiny 1-page chapters or giant 50-page blobs. Each section must group logically related segments into a cohesive thematic block.\n" +
+      "- Group approximately 2 to 6 pages (or 6 to 12 pages for very large 100+ page documents) into ONE comprehensive section (e.g. Pages 1-3, Pages 4-6, Pages 7-10).\n" +
+      "- ALL rangeStart and rangeEnd coordinates MUST be whole positive integers representing actual page numbers (e.g. 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99.\n" +
+      "- Do NOT output tiny 1-page chapters unless the entire document is very short, and do NOT lump entire 50-page blobs together. Each section must group logically related segments into a cohesive thematic block.\n" +
       "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
-      "- Target approximately 8 to 15 total sections for a large document (100-150 pages), or 3 to 6 sections for short documents (10-30 pages)."
+      "- Target approximately 4 to 8 total sections for short-to-medium documents (10-40 pages), or 8 to 15 sections for large documents (100+ pages)."
     : "AUDIO / VIDEO GROUPING RULES:\n" +
       "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
+      "- All coordinates should be whole integer seconds.\n" +
       "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
       "- Target 4 to 7 focused chapters for a 20-30 minute video, and 5 to 9 chapters for a 1-hour stream.";
 
@@ -204,6 +206,11 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
         cEnd = Math.max(...assignedSegments.map((s) => s.rangeEnd));
       }
 
+      if (isPage) {
+        cStart = cStart !== null ? Math.round(cStart) : null;
+        cEnd = cEnd !== null ? Math.round(cEnd) : null;
+      }
+
       return {
         ...chap,
         chapterIndex: idx + 1,
@@ -212,39 +219,76 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
       };
     });
 
-    // Ensure timeline continuity across consecutive chapters (no gaps)
-    for (let i = 0; i < chapters.length; i++) {
-      if (i === 0 && typeof cleanSegments[0]?.rangeStart === "number") {
-        if (chapters[i].rangeStart === null || chapters[i].rangeStart > cleanSegments[0].rangeStart) {
-          chapters[i].rangeStart = cleanSegments[0].rangeStart;
+    if (isPage) {
+      // Document / PDF: Ensure sequential, gapless integer page ranges
+      for (let i = 0; i < chapters.length; i++) {
+        if (i === 0 && typeof cleanSegments[0]?.rangeStart === "number") {
+          const firstStart = Math.round(cleanSegments[0].rangeStart);
+          if (chapters[i].rangeStart === null || chapters[i].rangeStart > firstStart) {
+            chapters[i].rangeStart = firstStart;
+          }
+        }
+        if (i > 0 && typeof chapters[i - 1].rangeEnd === "number") {
+          const prevEnd = chapters[i - 1].rangeEnd;
+          if (chapters[i].rangeStart === null || chapters[i].rangeStart <= prevEnd) {
+            chapters[i].rangeStart = Math.min(prevEnd + 1, chapters[i].rangeEnd || prevEnd + 1);
+          }
+        }
+        if (i === chapters.length - 1 && typeof cleanSegments[cleanSegments.length - 1]?.rangeEnd === "number") {
+          const lastEnd = Math.round(cleanSegments[cleanSegments.length - 1].rangeEnd);
+          if (chapters[i].rangeEnd === null || chapters[i].rangeEnd < lastEnd) {
+            chapters[i].rangeEnd = lastEnd;
+          }
+        }
+        if (typeof chapters[i].rangeStart === "number" && typeof chapters[i].rangeEnd === "number") {
+          if (chapters[i].rangeStart > chapters[i].rangeEnd) {
+            chapters[i].rangeEnd = chapters[i].rangeStart;
+          }
         }
       }
-      if (i > 0 && typeof chapters[i - 1].rangeEnd === "number") {
-        // Connect seamless boundary with previous chapter
-        if (chapters[i].rangeStart === null || chapters[i].rangeStart > chapters[i - 1].rangeEnd) {
-          chapters[i].rangeStart = chapters[i - 1].rangeEnd;
+    } else {
+      // Video / Audio: Ensure continuous timestamps
+      for (let i = 0; i < chapters.length; i++) {
+        if (i === 0 && typeof cleanSegments[0]?.rangeStart === "number") {
+          if (chapters[i].rangeStart === null || chapters[i].rangeStart > cleanSegments[0].rangeStart) {
+            chapters[i].rangeStart = Math.round(cleanSegments[0].rangeStart);
+          }
         }
-      }
-      if (i === chapters.length - 1 && typeof cleanSegments[cleanSegments.length - 1]?.rangeEnd === "number") {
-        const lastEnd = cleanSegments[cleanSegments.length - 1].rangeEnd;
-        if (chapters[i].rangeEnd === null || chapters[i].rangeEnd < lastEnd) {
-          chapters[i].rangeEnd = lastEnd;
+        if (i > 0 && typeof chapters[i - 1].rangeEnd === "number") {
+          if (chapters[i].rangeStart === null || chapters[i].rangeStart > chapters[i - 1].rangeEnd) {
+            chapters[i].rangeStart = chapters[i - 1].rangeEnd;
+          }
+        }
+        if (i === chapters.length - 1 && typeof cleanSegments[cleanSegments.length - 1]?.rangeEnd === "number") {
+          const lastEnd = Math.round(cleanSegments[cleanSegments.length - 1].rangeEnd);
+          if (chapters[i].rangeEnd === null || chapters[i].rangeEnd < lastEnd) {
+            chapters[i].rangeEnd = lastEnd;
+          }
+        }
+        if (typeof chapters[i].rangeStart === "number" && typeof chapters[i].rangeEnd === "number") {
+          if (chapters[i].rangeStart > chapters[i].rangeEnd) {
+            chapters[i].rangeEnd = chapters[i].rangeStart;
+          }
         }
       }
     }
 
-    // Format rangeLabel deterministically
+    // Format rangeLabel deterministically with pure integers
     chapters = chapters.map((chap) => {
       let formattedLabel = chap.rangeLabel;
       if (typeof chap.rangeStart === "number" && typeof chap.rangeEnd === "number") {
         if (isPage) {
-          formattedLabel = chap.rangeStart === chap.rangeEnd ? `Page ${chap.rangeStart}` : `Pages ${chap.rangeStart}-${chap.rangeEnd}`;
+          const s = Math.round(chap.rangeStart);
+          const e = Math.round(chap.rangeEnd);
+          formattedLabel = s === e ? `Page ${s}` : `Pages ${s}-${e}`;
         } else if (isTimestamp) {
           formattedLabel = `${formatTs(chap.rangeStart)}-${formatTs(chap.rangeEnd)}`;
         }
       }
       return {
         ...chap,
+        rangeStart: typeof chap.rangeStart === "number" ? Math.round(chap.rangeStart) : chap.rangeStart,
+        rangeEnd: typeof chap.rangeEnd === "number" ? Math.round(chap.rangeEnd) : chap.rangeEnd,
         rangeLabel: formattedLabel,
       };
     });

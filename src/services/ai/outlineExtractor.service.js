@@ -44,7 +44,7 @@ export async function extractBatchSegments(batches, concurrency = 5) {
                 "2. MULTILINGUAL & CROSS-DOMAIN FIDELITY: When processing content in any language (including Hindi, Spanish, or technical jargon), preserve all proper nouns, character names, and domain terminology accurately without hallucinating unmentioned lore or external facts.\n" +
                 "3. HIGH-DENSITY GRANULAR SEGMENTATION: Break the slice into focused, distinct segments whenever the subject matter, speaker, scene, character focus, or sub-topic changes (typically 2 to 5 minutes each, or 1 to 3 pages). It is STRICTLY FORBIDDEN to lump multiple distinct events or sub-topics into one generic segment.\n" +
                 "4. PRESERVE SPECIFICS & NUANCES: Extract concrete examples, analogies, comparative models, critique of tools/methodologies, domain principles, and unique arguments rather than generalized high-level summaries.\n" +
-                "5. ACCURATE COORDINATES: For each segment, provide the accurate `rangeStart` and `rangeEnd` numerical coordinates and human-readable `rangeLabel` corresponding to that segment's exact slice boundaries.\n" +
+                "5. ACCURATE INTEGER COORDINATES: For each segment, provide the accurate `rangeStart` and `rangeEnd` numerical coordinates and human-readable `rangeLabel`. For documents/PDFs (where coordinates are pages), `rangeStart` and `rangeEnd` MUST BE POSITIVE WHOLE INTEGERS (e.g., 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99. Use the `[Source Location: Page X]` headers in the text to identify exact page boundaries.\n" +
                 "6. DENSE TAKEAWAYS: For each segment, provide 4-8 specific, granular takeaway points capturing the actual assertions, events, steps, arguments, or insights presented.\n" +
                 "7. DOMAIN TERMINOLOGY: Extract all specialized terminology, jargon, theories, metaphors, or named entities introduced in the text with precise definitions as used in context.\n" +
                 "8. TOPIC HINT: Provide a 2-5 word descriptive label capturing the core theme of the segment.\n\n" +
@@ -57,11 +57,39 @@ export async function extractBatchSegments(batches, concurrency = 5) {
             },
           ],
           response_format: zodResponseFormat(SegmentBatchSchema, "segment_batch"),
-
         });
 
         const parsed = completion.choices[0].message.parsed;
-        const segments = parsed?.segments || [];
+        let segments = parsed?.segments || [];
+
+        const isPageBatch = (batch.rangeLabel || "").toLowerCase().includes("page");
+
+        // Validate, sanitize and clamp segment coordinates strictly against batch boundaries
+        segments = segments.map((seg) => {
+          let rStart = typeof seg.rangeStart === "number" ? seg.rangeStart : batch.rangeStart;
+          let rEnd = typeof seg.rangeEnd === "number" ? seg.rangeEnd : batch.rangeEnd;
+
+          if (isPageBatch) {
+            rStart = Math.max(batch.rangeStart, Math.min(Math.round(rStart), batch.rangeEnd));
+            rEnd = Math.max(rStart, Math.min(Math.round(rEnd), batch.rangeEnd));
+          } else {
+            rStart = Math.max(batch.rangeStart, Math.min(rStart, batch.rangeEnd));
+            rEnd = Math.max(rStart, Math.min(rEnd, batch.rangeEnd));
+          }
+
+          let rLabel = seg.rangeLabel;
+          if (isPageBatch) {
+            rLabel = rStart === rEnd ? `Page ${rStart}` : `Pages ${rStart}-${rEnd}`;
+          }
+
+          return {
+            ...seg,
+            rangeStart: rStart,
+            rangeEnd: rEnd,
+            rangeLabel: rLabel || batch.rangeLabel,
+          };
+        });
+
         console.log(`  ✓ Batch ${index + 1}/${batches.length} extracted ${segments.length} segment(s)`);
         return segments;
       } catch (err) {
