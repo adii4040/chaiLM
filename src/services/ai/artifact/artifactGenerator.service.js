@@ -17,6 +17,7 @@ import { buildArtifactPrompt } from "../../../prompt/artifcate_prompt.js";
  * @returns {Promise<Object>} Validated JSON output conforming to the artifact's Zod schema
  */
 export async function generateStudioArtifact({
+  userPrompt,
   type,
   sourceTitle = "Untitled Source",
   sourceType = "document",
@@ -30,7 +31,8 @@ export async function generateStudioArtifact({
 
   const modelName = config.openai.chatModel || "gpt-4o-mini";
 
-  const { systemPrompt, userPrompt, schema, schemaName } = buildArtifactPrompt({
+  const { systemPrompt, artifactPrompt, schema, schemaName } = buildArtifactPrompt({
+    userPrompt,
     type,
     sourceTitle,
     sourceType,
@@ -47,7 +49,7 @@ export async function generateStudioArtifact({
       temperature: 0.2,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        { role: "user", content: artifactPrompt },
       ],
       response_format: zodResponseFormat(schema, schemaName),
     });

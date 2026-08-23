@@ -307,7 +307,7 @@ export async function generateFlashcards(req, res) {
  */
 export async function generateQuiz(req, res) {
   try {
-    const { workspaceId, sourceId, title, questionCount, difficulty, options } = req.body;
+    const { workspaceId, sourceId, userPrompt, title, questionCount, difficulty, options } = req.body;
     const userId = req.user?._id;
 
     const { workspace, source, effectiveUserId } = await resolveWorkspaceAndSource(workspaceId, sourceId, userId);
@@ -319,6 +319,7 @@ export async function generateQuiz(req, res) {
     };
 
     const quizData = await generateQuizArtifact({
+      userPrompt,
       sourceTitle: source.title,
       sourceType: source.sourceType,
       summaryOutline: source.summaryOutline,

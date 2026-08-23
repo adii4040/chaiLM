@@ -75,6 +75,7 @@ export const ARTIFACT_REGISTRY = {
  * @returns {{ systemPrompt: string, userPrompt: string, schema: Object, schemaName: string }}
  */
 export function buildArtifactPrompt({
+  userPrompt,
   type,
   sourceTitle = "Untitled Source",
   sourceType = "document",
@@ -89,6 +90,7 @@ export function buildArtifactPrompt({
   }
 
   const typeSpecificPrompt = config.formatter({
+    userPrompt,
     sourceTitle,
     sourceType,
     outline: summaryOutline,
@@ -97,7 +99,7 @@ export function buildArtifactPrompt({
   });
 
   const systemPrompt = `${BASE_ARTIFACT_SYSTEM_PROMPT}\n\nARTIFACT ROLE SPECIFICATION:\nYou are generating the artifact "${type}" following the exact schema provided.`;
-  const userPrompt = typeSpecificPrompt;
+  const artifactPrompt = typeSpecificPrompt;
 
 
   console.log("systemPrompt", systemPrompt);
@@ -105,7 +107,7 @@ export function buildArtifactPrompt({
 
   return {
     systemPrompt,
-    userPrompt,
+    artifactPrompt,
     schema: config.schema,
     schemaName: config.schemaName,
   };

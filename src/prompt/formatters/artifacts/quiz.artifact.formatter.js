@@ -2,6 +2,7 @@
  * Formats the prompt and rules for generating an interactive Quiz from source outline summary.
  *
  * @param {Object} params
+ * @param {string} [params.userPrompt] - Custom prompt/instructions specified by the user
  * @param {string} params.sourceTitle
  * @param {string} [params.sourceType]
  * @param {Object} params.outline - summaryOutline object containing chapters
@@ -11,7 +12,14 @@
  * @param {string} [params.options.difficulty="medium"]
  * @returns {string} Formatted type-specific prompt content
  */
-export function formatQuizPrompt({ sourceTitle, sourceType = "document", outline, workspaceTitle = "Workspace", options = {} }) {
+export function formatQuizPrompt({
+  userPrompt,
+  sourceTitle,
+  sourceType = "document",
+  outline,
+  workspaceTitle = "Workspace",
+  options = {},
+}) {
   const chapters = outline?.chapters || [];
   const targetCount = options.questionCount || 10;
   const targetDifficulty = options.difficulty || "medium";
@@ -28,11 +36,18 @@ export function formatQuizPrompt({ sourceTitle, sourceType = "document", outline
     })
     .join("\n\n");
 
+  const customUserSection = userPrompt?.trim()
+    ? `USER-SPECIFIED CUSTOM REQUIREMENTS & FOCUS:\n` +
+      `The user has provided custom instructions for this quiz. You MUST prioritize and integrate these specific requirements (focus areas, question topics, angle, or specialized constraints) while adhering to the formatting rules:\n` +
+      `"""\n${userPrompt.trim()}\n"""\n\n`
+    : "";
+
   return (
     `QUIZ GENERATION DIRECTIVE:\n` +
     `You are tasked with generating an interactive, rigorous assessment Quiz for "${sourceTitle}" (Workspace: "${workspaceTitle}").\n` +
     `Target Number of Questions: ${targetCount}\n` +
     `Target Difficulty Level: ${targetDifficulty}\n\n` +
+    `${customUserSection}` +
     `QUIZ QUESTION RULES:\n` +
     `1. Full Outline Coverage: Distribute questions across ALL document sections/chapters so all major topics and events are assessed.\n` +
     `2. STRICT FACTUAL RIGOR RULE:\n` +
@@ -45,7 +60,6 @@ export function formatQuizPrompt({ sourceTitle, sourceType = "document", outline
     `6. In-Depth Explanation: Every question MUST include an \`explanation\` field detailing why the correct choice is accurate and why the alternative distractors are incorrect.\n` +
     `7. Plausible Domain Distractors: Avoid silly or obvious wrong choices. Distractors should reflect believable misconceptions or related domain terms.\n` +
     `8. Source Reference: Set \`sourceReference\` to the relevant section or rangeLabel (e.g. "${chapters[0]?.rangeLabel || "Chapter 1"}").\n\n` +
-
     `SOURCE MASTER OUTLINE & SUMMARY DATA:\n` +
     `Document: ${sourceTitle} (Type: ${sourceType})\n\n` +
     `${formattedChapters}`
