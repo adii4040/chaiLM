@@ -7,8 +7,8 @@ import {
 } from "./ai/index.js";
 import { reciprocalRankFusion } from "../utils/rrf.utils.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
-import { ChatMessage } from "../models/ChatMessage.js";
-import { Workspace } from "../models/Workspace.js";
+import { ChatMessage } from "../models/ChatMessage.model.js";
+import { Workspace } from "../models/Workspace.model.js";
 import { getVectorStore } from "../lib/index.js";
 
 export async function verifyWorkSpace(workspaceId, userId) {

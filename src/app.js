@@ -6,6 +6,7 @@ import queryRoutes from './routes/query.routes.js';
 import workspaceRoutes from './routes/workspace.routes.js';
 import userRoutes from './routes/user.routes.js';
 import inngestRouter from './routes/inngest.routes.js';
+import studioRoutes from './routes/studio.routes.js';
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.use('/api/indexer', indexerRoutes);
 app.use('/api/query', queryRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/studio', studioRoutes);
 
 export default app;
