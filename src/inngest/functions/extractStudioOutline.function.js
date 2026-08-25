@@ -4,6 +4,7 @@ import { createBatches } from "../../utils/batchUnits.utils.js";
 import { extractBatchSegments } from "../../services/ai/outlineExtractor.service.js";
 import { reconcileOutline } from "../../services/ai/outlineMerge.service.js";
 import { updateStudioOutlineStatus, saveStudioOutline } from "../../services/indexer.service.js";
+import { Workspace } from "../../models/Workspace.model.js";
 
 /**
  * Inngest background job function for Studio Master Outline extraction.
@@ -35,18 +36,61 @@ export const extractStudioOutlineFunction = inngest.createFunction(
       });
     }
 
-    // Step 2: Extract & Reconcile in RAM (Lean step: only the final compact outline ~2KB is returned to Inngest)
+    // Step 2: For PDF, wait until Cloudinary upload finishes and remote URL is available in DB
+    let targetPdfUrl = url;
+    if (type === "pdf") {
+      targetPdfUrl = await step.run("wait-for-pdf-upload", async () => {
+        if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+          return url;
+        }
+
+        const maxAttempts = 30;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const workspace = await Workspace.findOne({
+            workspaceId,
+            "sources.sourceId": sourceId,
+          });
+
+          const source = workspace?.sources?.find((s) => s.sourceId === sourceId);
+          if (!source) {
+            throw new Error(`Source ${sourceId} not found in workspace ${workspaceId}`);
+          }
+
+          if (source.status === "FAILED") {
+            throw new Error(`PDF indexing failed: ${source.errorMessage || "Upload error"}`);
+          }
+
+          const candidateUrl = source.cloudinaryUrl || source.sourceUrl;
+          if (candidateUrl && (candidateUrl.startsWith("http://") || candidateUrl.startsWith("https://"))) {
+            console.log(`[Studio Pipeline] Successfully obtained Cloudinary PDF URL for source ${sourceId}: ${candidateUrl}`);
+            return candidateUrl;
+          }
+
+          console.log(`[Studio Pipeline] Waiting for Cloudinary PDF upload to complete for source ${sourceId} (attempt ${attempt}/${maxAttempts})...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        throw new Error(`Timed out waiting for PDF Cloudinary URL for source ${sourceId}`);
+      });
+    }
+
+    // Step 3: Extract & Reconcile in RAM (Lean step: only the final compact outline ~2KB is returned to Inngest)
     const outline = await step.run("extract-and-reconcile-outline", async () => {
       console.log(`[Studio Pipeline] Step: Loading units for source ${sourceId}...`);
-      const { units, title } = await loadUnitsForSource({ type, url, filePath, originalName });
+      const { units, title } = await loadUnitsForSource({
+        type,
+        url: targetPdfUrl || url,
+        filePath,
+        originalName,
+      });
 
       if (!units || units.length === 0) {
         console.warn(`[Studio Pipeline] No structural units extracted for source ${sourceId} ("${title}").`);
         return { chapters: [] };
       }
 
-      const tokenBudget = (type === "youtube" || type === "audio") ? 4000 : 7000;
-      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with budget ${tokenBudget} tokens...`);
+      const tokenBudget = (type === "youtube" || type === "audio") ? 2000 : 3500;
+      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with high-density budget ${tokenBudget} tokens...`);
       const batches = createBatches(units, tokenBudget);
 
 

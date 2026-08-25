@@ -17,9 +17,9 @@ export async function loadUnitsForSource(sourcePayload) {
   console.log(`[Studio Unit Loader] Loading structural units for type: '${normalizedType}'...`);
 
   if (normalizedType === "pdf") {
-    const inputTarget = filePath || url;
+    const inputTarget = url || filePath;
     if (!inputTarget) {
-      throw new Error("Missing filePath or url for PDF unit extraction");
+      throw new Error("Missing url or filePath for PDF unit extraction");
     }
     return await getPdfUnits(inputTarget, originalName);
   }

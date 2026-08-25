@@ -5,10 +5,24 @@ import { config } from "../config/env.js";
 import { uploadOnCloudinary } from "../lib/index.js";
 
 async function extractPDF(filePath) {
+  const isRemote = typeof filePath === "string" && (filePath.startsWith("http://") || filePath.startsWith("https://"));
+
+  if (isRemote) {
+    console.log(`[PDF Processor] Loading PDF directly from remote URL: ${filePath}`);
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch PDF from URL: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const pdfBlob = new Blob([arrayBuffer], { type: "application/pdf" });
+    return { pdfBlob, cloudinaryUrl: filePath, publicId: null };
+  }
+
+  console.log(`[PDF Processor] Uploading local PDF file to Cloudinary: ${filePath}`);
   const cloudinaryResult = await uploadOnCloudinary(filePath);
 
   if (!cloudinaryResult) {
-    throw new Error("Failed to upload PDF file to Cloudinary");
+    throw new Error(`Failed to upload PDF file to Cloudinary (path: ${filePath})`);
   }
 
   const cloudinaryUrl = cloudinaryResult.secure_url || cloudinaryResult.url;

@@ -12,6 +12,7 @@ const router = Router();
 router.use(verifyJwt);
 
 router.post("/", handleCreateWorkspace);
+
 router.get("/", handleGetAllWorkspaces);
 router.get("/:workspaceId", handleGetWorkspaceData);
 router.delete("/:workspaceId", handleDeleteWorkspace);

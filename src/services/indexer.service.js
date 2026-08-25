@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { config } from "../config/env.js";
 import { processPDF, processYouTube, processWeb } from '../loaders/index.js';
-import { Workspace } from "../models/Workspace.js";
+import { Workspace } from "../models/Workspace.model.js";
 import { getVectorStore } from "../lib/index.js";
 
 /**

@@ -85,7 +85,7 @@ export function createBatches(units, tokenBudget = 8000) {
         : `${firstUnit.rangeLabel} to ${lastUnit.rangeLabel}`;
 
     return {
-      text: b.text,
+      text: b.units.map((u) => `--- [Source Location: ${u.rangeLabel}] ---\n${u.text}`).join("\n\n"),
       tokens: b.tokens,
       rangeStart: firstUnit.rangeStart,
       rangeEnd: lastUnit.rangeEnd,
