@@ -17,5 +17,5 @@ jobs:
       - name: Build image (validation only)
         uses: docker/build-push-action@v6
         with:
-          context: ./server
+          context: .
           push: false
