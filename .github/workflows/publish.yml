@@ -35,7 +35,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
-          context: ./server
+          context: .
           push: true
           tags: |
             ghcr.io/adii4040/chailm-api:${{ env.TAG }}
