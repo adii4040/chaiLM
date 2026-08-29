@@ -10,6 +10,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,3 +43,31 @@ jobs:
             ghcr.io/adii4040/chailm-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy_cloud_run:
+    needs: docker_publish
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: chailm-507011
+          workload_identity_provider: projects/756784338813/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-deployer@chailm-507011.iam.gserviceaccount.com
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: chailm-api
+          region: asia-south1
+          project_id: chailm-507011
+          image: ghcr.io/adii4040/chailm-api:${{ github.sha }}
