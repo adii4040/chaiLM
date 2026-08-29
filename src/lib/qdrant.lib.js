@@ -14,6 +14,8 @@ const embeddings = new OpenAIEmbeddings({
 export async function getVectorStore() {
   return await QdrantVectorStore.fromExistingCollection(embeddings, {
     url: config.qdrant.url,
+    apiKey: config.qdrant.apiKey,
     collectionName: config.qdrant.collection,
   });
 }
+
