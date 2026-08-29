@@ -7,7 +7,8 @@ export const config = {
     refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET_KEY || "chailm_refresh_secret_key_default_2026",
   },
   qdrant: {
-    url: process.env.QDRANT_URL || "http://127.0.0.1:6333",
+    url: process.env.QDRANT_URL || process.env.CLUSTER_ENDPOINT || "http://127.0.0.1:6333",
+    apiKey: process.env.QDRANT_API_KEY,
     collection: process.env.QDRANT_COLLECTION || "workspace-docs",
   },
   openai: {

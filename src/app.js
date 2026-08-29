@@ -7,6 +7,7 @@ import workspaceRoutes from './routes/workspace.routes.js';
 import userRoutes from './routes/user.routes.js';
 import inngestRouter from './routes/inngest.routes.js';
 import studioRoutes from './routes/studio.routes.js';
+import healthRoutes from './routes/health.routes.js';
 
 const app = express();
 
@@ -21,9 +22,9 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 app.use(express.static('public'));
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Server is healthy' });
-});
+// Health check endpoints
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // Inngest background event endpoint
 app.use('/api/inngest', inngestRouter);
