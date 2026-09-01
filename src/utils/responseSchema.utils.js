@@ -183,6 +183,9 @@ export const AudioOverviewSchema = z.object({
       speaker: z.enum(["Host 1", "Host 2"]).describe("Speaker identifier"),
       text: z.string().describe("Spoken dialogue utterance"),
       tone: z.string().describe("Vocal direction or tone, e.g. 'enthusiastic', 'inquisitive', 'analytical'"),
+      ai_instruction: z.string().describe(
+        "Natural-language delivery instruction for a TTS voice model — pacing, emphasis, emotional coloring, pauses. E.g. 'Speak with rising excitement, slight emphasis on the word seismic, quick pace.'"
+      ),
     })
   ).describe("Turn-by-turn conversational podcast transcript"),
 });
