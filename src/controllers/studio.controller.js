@@ -423,11 +423,20 @@ export async function generateAudioOverview(req, res) {
       type: "audio_overview",
       title: title || audioData.episodeTitle || `${source.title} Audio Overview`,
       data: audioData,
+      audioStatus: "pending",
       metadata: {
         sourceTitle: source.title,
         sourceType: source.sourceType,
         dialogueTurns: audioData.dialogue?.length || 0,
         durationMinutesEstimate: audioData.durationMinutesEstimate || 5,
+      },
+    });
+
+    // Dispatch async audio synthesis background job
+    await inngest.send({
+      name: "studio/audio.synthesize.requested",
+      data: {
+        artifactId: artifact._id.toString(),
       },
     });
 
