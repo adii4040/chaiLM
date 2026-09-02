@@ -89,7 +89,7 @@ export function preMergeCollidingSegments(segments, overlapThreshold = 0.5) {
  * @param {string} [documentTitle="Untitled Source"] - Title of the document
  * @returns {Promise<{ chapters: Array<{ chapterIndex: number, chapterTitle: string, rangeLabel: string, rangeStart: number, rangeEnd: number, summary: string, takeaways: string[], terms: Array<{term: string, definition: string}> }> }>}
  */
-export async function reconcileOutline(segments, documentTitle = "Untitled Source") {
+export async function reconcileOutline(segments, documentTitle = "Untitled Source", sourceType = null) {
   if (!Array.isArray(segments) || segments.length === 0) {
     return { chapters: [] };
   }
@@ -105,8 +105,9 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
   }));
 
   const sampleLabel = cleanSegments[0]?.rangeLabel || "";
-  const isTimestamp = sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500);
-  const isPage = sampleLabel.toLowerCase().includes("page");
+  const isMedia = sourceType === "youtube" || sourceType === "audio";
+  const isPage = sourceType ? (sourceType === "pdf" || sourceType === "web") : sampleLabel.toLowerCase().includes("page");
+  const isTimestamp = isMedia || (!isPage && (sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500)));
 
   const groupingGuidance = isPage
     ? "DOCUMENT / PDF GROUPING RULES:\n" +
@@ -177,9 +178,9 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     }
 
     // 2. Post-processing guarantee: Ensure mathematical boundary calculation and zero gaps
-    const sampleLabel = cleanSegments[0]?.rangeLabel || "";
-    const isTimestamp = sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500);
-    const isPage = sampleLabel.toLowerCase().includes("page");
+    const isMedia = sourceType === "youtube" || sourceType === "audio";
+    const isPage = sourceType ? (sourceType === "pdf" || sourceType === "web") : (cleanSegments[0]?.rangeLabel || "").toLowerCase().includes("page");
+    const isTimestamp = isMedia || (!isPage && ((cleanSegments[0]?.rangeLabel || "").includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500)));
 
     const formatTs = (sec) => {
       const s = Math.floor(sec || 0);
@@ -278,12 +279,12 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     chapters = chapters.map((chap) => {
       let formattedLabel = chap.rangeLabel;
       if (typeof chap.rangeStart === "number" && typeof chap.rangeEnd === "number") {
-        if (isPage) {
+        if (isTimestamp) {
+          formattedLabel = `${formatTs(chap.rangeStart)}-${formatTs(chap.rangeEnd)}`;
+        } else if (isPage) {
           const s = Math.round(chap.rangeStart);
           const e = Math.round(chap.rangeEnd);
           formattedLabel = s === e ? `Page ${s}` : `Pages ${s}-${e}`;
-        } else if (isTimestamp) {
-          formattedLabel = `${formatTs(chap.rangeStart)}-${formatTs(chap.rangeEnd)}`;
         }
       }
       return {

@@ -110,11 +110,11 @@ export const extractStudioOutlineFunction = inngest.createFunction(
       const batches = createBatches(units, tokenBudget);
 
 
-      console.log(`[Studio Pipeline] Step: Extracting segments from ${batches.length} batch(es)...`);
-      const segments = await extractBatchSegments(batches, 5);
+      console.log(`[Studio Pipeline] Step: Extracting segments from ${batches.length} batch(es) for type '${type}'...`);
+      const segments = await extractBatchSegments(batches, 5, type);
 
-      console.log(`[Studio Pipeline] Step: Reconciling ${segments.length} segment(s) into chapters...`);
-      return await reconcileOutline(segments, title);
+      console.log(`[Studio Pipeline] Step: Reconciling ${segments.length} segment(s) into chapters for type '${type}'...`);
+      return await reconcileOutline(segments, title, type);
     });
 
     // Step 3: Save outline to MongoDB Workspace source
