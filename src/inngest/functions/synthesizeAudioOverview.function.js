@@ -1,6 +1,8 @@
 import { inngest } from "../client.js";
 import { StudioArtifact } from "../../models/StudioArtifact.model.js";
 import { synthesizeDialogueAudio } from "../../services/ai/artifact/synthesizeDialogueAudio.service.js";
+import { stitchDialogueAudio } from "../../services/ai/artifact/audioStitcher.service.js";
+import { uploadOnCloudinary } from "../../lib/cloudinary.lib.js";
 
 /**
  * Inngest background job function for Studio Audio Overview TTS synthesis.
@@ -57,42 +59,60 @@ export const synthesizeAudioOverviewFunction = inngest.createFunction(
       );
     });
 
-    // Step 3: Synthesize dialogue audio with TTS (and stitch + upload in a single step to avoid serializing Buffer payloads across step.run boundaries)
+    // Step 3: Synthesize dialogue TTS, stitch with seamless mute via FFmpeg, and upload to Cloudinary (all in one step to avoid serializing Buffer payloads into step state)
     const audioResults = await step.run("synthesize-and-process-audio", async () => {
       const dialogue = artifact.data?.dialogue || [];
       if (!dialogue.length) {
         throw new Error("Artifact contains no dialogue turns to synthesize");
       }
 
-      // 1. Synthesize audio buffers locally in memory
-      const buffers = await synthesizeDialogueAudio(dialogue);
+      console.log(`[Inngest Studio Audio] Synthesizing ${dialogue.length} dialogue turns for artifact ${artifactId}...`);
+      const turnResults = await synthesizeDialogueAudio(dialogue);
 
-      // 2. TODO: When FFmpeg stitching is implemented:
-      //    const stitchedBuffer = await stitchAudioBuffers(buffers);
-      //    const { audioUrl, duration } = await uploadAudioToCloudinary(stitchedBuffer);
-      //    await StudioArtifact.findOneAndUpdate(
-      //      { $or: [{ _id: artifactId }, { artifactId }] },
-      //      { audioStatus: "ready", audioUrl, duration }
-      //    );
-      //    return { audioUrl, duration, bufferCount: buffers.length };
+      console.log(`[Inngest Studio Audio] Stitching ${turnResults.length} audio buffers with seamless mute...`);
+      const { outputPath, cleanup } = await stitchDialogueAudio(turnResults, {
+        pauseDurationMs: 400,
+      });
 
-      // Temporary placeholder until FFmpeg & Cloudinary upload are integrated
-      console.log(
-        `[Inngest Studio Audio] Synthesized ${buffers.length} audio buffers for artifact ${artifactId}. (Stitching & Cloudinary upload step pending implementation)`
-      );
+      let uploadResponse = null;
+      try {
+        console.log(`[Inngest Studio Audio] Uploading stitched overview to Cloudinary for artifact ${artifactId}...`);
+        uploadResponse = await uploadOnCloudinary(outputPath);
+        if (!uploadResponse || !uploadResponse.secure_url) {
+          throw new Error("Cloudinary upload failed for stitched audio overview");
+        }
+      } finally {
+        await cleanup();
+      }
+
+      const audioUrl = uploadResponse.secure_url;
+      const duration = uploadResponse.duration || null;
+
+      console.log(`[Inngest Studio Audio] Audio synthesis and upload completed for artifact ${artifactId}: ${audioUrl}`);
 
       await StudioArtifact.findOneAndUpdate(
         { $or: [{ _id: artifactId }, { artifactId }] },
-        { audioStatus: "ready" },
+        {
+          audioStatus: "ready",
+          audioUrl,
+          ...(duration ? { "metadata.durationSeconds": duration } : {}),
+        },
         { new: true }
       );
 
-      return { bufferCount: buffers.length };
+      return {
+        audioUrl,
+        duration,
+        bufferCount: turnResults.length,
+        audioStatus: "ready",
+      };
     });
 
     return {
       success: true,
       artifactId,
+      audioUrl: audioResults.audioUrl,
+      duration: audioResults.duration,
       bufferCount: audioResults.bufferCount,
       audioStatus: "ready",
     };
