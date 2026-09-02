@@ -29,6 +29,7 @@ export async function extractBatchSegments(batches, concurrency = 5) {
       try {
         const completion = await openai.chat.completions.parse({
           model: modelName,
+          ...(modelName.includes("gpt-5") || modelName.startsWith("o") ? { reasoning_effort: "low" } : {}),
           messages: [
             {
               role: "system",

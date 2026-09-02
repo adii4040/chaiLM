@@ -110,22 +110,23 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
 
   const groupingGuidance = isPage
     ? "DOCUMENT / PDF GROUPING RULES:\n" +
-      "- Group approximately 2 to 6 pages (or 6 to 12 pages for very large 100+ page documents) into ONE comprehensive section (e.g. Pages 1-3, Pages 4-6, Pages 7-10).\n" +
-      "- ALL rangeStart and rangeEnd coordinates MUST be whole positive integers representing actual page numbers (e.g. 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99.\n" +
-      "- Do NOT output tiny 1-page chapters unless the entire document is very short, and do NOT lump entire 50-page blobs together. Each section must group logically related segments into a cohesive thematic block.\n" +
-      "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
-      "- Target approximately 4 to 8 total sections for short-to-medium documents (10-40 pages), or 8 to 15 sections for large documents (100+ pages)."
+    "- Group approximately 2 to 6 pages (or 6 to 12 pages for very large 100+ page documents) into ONE comprehensive section (e.g. Pages 1-3, Pages 4-6, Pages 7-10).\n" +
+    "- ALL rangeStart and rangeEnd coordinates MUST be whole positive integers representing actual page numbers (e.g. 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99.\n" +
+    "- Do NOT output tiny 1-page chapters unless the entire document is very short, and do NOT lump entire 50-page blobs together. Each section must group logically related segments into a cohesive thematic block.\n" +
+    "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
+    "- Target approximately 4 to 8 total sections for short-to-medium documents (10-40 pages), or 8 to 15 sections for large documents (100+ pages)."
     : "AUDIO / VIDEO GROUPING RULES:\n" +
-      "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
-      "- All coordinates should be whole integer seconds.\n" +
-      "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
-      "- Target 4 to 7 focused chapters for a 20-30 minute video, and 5 to 9 chapters for a 1-hour stream.";
+    "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
+    "- All coordinates should be whole integer seconds.\n" +
+    "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
+    "- Target 4 to 7 focused chapters for a 20-30 minute video, 5 to 9 chapters for a 1-hour stream, or 10 to 18 chapters for 2-3+ hour streams.";
 
   console.log(`[Studio Outline Merge] Reconciling ${cleanSegments.length} deduplicated segment(s) (down from ${segments.length} raw) for "${documentTitle}" (${isPage ? "PDF/Document" : "Media/Audio"})...`);
 
   try {
     const completion = await openai.chat.completions.parse({
       model: modelName,
+      ...(modelName.includes("gpt-5") || modelName.startsWith("o") ? { reasoning_effort: "low" } : {}),
       messages: [
         {
           role: "system",
