@@ -1,12 +1,12 @@
 import { zodResponseFormat } from "openai/helpers/zod";
-import { openai } from "../../lib/openai.lib.js";
+import { gemini } from "../../lib/gemini.lib.js";
 import { config } from "../../config/env.js";
 import { pLimit } from "../../utils/pLimit.utils.js";
 import { SegmentBatchSchema } from "../../utils/responseSchema.utils.js";
 
 /**
  * Extracts structured analytical segments from a list of document batches in parallel,
- * bounded by a concurrency limiter to protect against OpenAI rate limits.
+ * bounded by a concurrency limiter to protect against rate limits.
  *
  * @param {Array<{ text: string, rangeLabel: string, rangeStart: number, rangeEnd: number, tokens: number }>} batches
  * @param {number} [concurrency=5] Maximum parallel LLM calls
@@ -28,7 +28,7 @@ export async function extractBatchSegments(batches, concurrency = 5, sourceType 
   }
 
   const limit = pLimit(concurrency);
-  const modelName = config.openai.outlineModel || "gpt-5-mini";
+  const modelName = config.gemini?.outlineModel || process.env.OUTLINE_MODEL || "gemini-3.5-flash-lite";
   const isMedia = sourceType === "youtube" || sourceType === "audio";
 
   const coordinateRule = isMedia
@@ -41,7 +41,7 @@ export async function extractBatchSegments(batches, concurrency = 5, sourceType 
     limit(async () => {
       console.log(`  → Processing Batch ${index + 1}/${batches.length} (${batch.rangeLabel}, ~${batch.tokens} tokens)...`);
       try {
-        const completion = await openai.chat.completions.parse({
+        const completion = await gemini.chat.completions.parse({
           model: modelName,
           ...(modelName.includes("gpt-5") || modelName.startsWith("o") ? { reasoning_effort: "low" } : {}),
           messages: [

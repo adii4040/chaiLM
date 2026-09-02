@@ -1,5 +1,5 @@
 import { zodResponseFormat } from "openai/helpers/zod";
-import { openai } from "../../lib/openai.lib.js";
+import { gemini } from "../../lib/gemini.lib.js";
 import { config } from "../../config/env.js";
 import { OutlineSchema } from "../../utils/responseSchema.utils.js";
 
@@ -94,7 +94,7 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     return { chapters: [] };
   }
 
-  const modelName = config.openai.outlineModel || "gpt-5-mini";
+  const modelName = config.gemini?.outlineModel || process.env.OUTLINE_MODEL || "gemini-3.5-flash-lite";
 
 
   // 1. Programmatically collapse boundary overlap collisions
@@ -125,7 +125,7 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
   console.log(`[Studio Outline Merge] Reconciling ${cleanSegments.length} deduplicated segment(s) (down from ${segments.length} raw) for "${documentTitle}" (${isPage ? "PDF/Document" : "Media/Audio"})...`);
 
   try {
-    const completion = await openai.chat.completions.parse({
+    const completion = await gemini.chat.completions.parse({
       model: modelName,
       ...(modelName.includes("gpt-5") || modelName.startsWith("o") ? { reasoning_effort: "low" } : {}),
       messages: [
