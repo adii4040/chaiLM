@@ -89,16 +89,32 @@ export const extractStudioOutlineFunction = inngest.createFunction(
         return { chapters: [] };
       }
 
-      const tokenBudget = (type === "youtube" || type === "audio") ? 2000 : 3500;
-      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with high-density budget ${tokenBudget} tokens...`);
+      let tokenBudget = 5000;
+      if (type === "youtube" || type === "audio") {
+        const totalDurationSec =
+          units.length > 0
+            ? (units[units.length - 1].rangeEnd - (units[0].rangeStart || 0))
+            : 0;
+
+        if (totalDurationSec > 3600) {
+          tokenBudget = 6000; // > 1 hour
+        } else if (totalDurationSec > 1800) {
+          tokenBudget = 4000; // 30 mins to 1 hour
+        } else {
+          tokenBudget = 2000; // <= 30 mins
+        }
+        console.log(`[Studio Pipeline] Media duration: ${Math.round(totalDurationSec / 60)} mins -> Selected tokenBudget: ${tokenBudget} tokens`);
+      }
+
+      console.log(`[Studio Pipeline] Step: Creating batches from ${units.length} unit(s) with tokenBudget ${tokenBudget}...`);
       const batches = createBatches(units, tokenBudget);
 
 
-      console.log(`[Studio Pipeline] Step: Extracting segments from ${batches.length} batch(es)...`);
-      const segments = await extractBatchSegments(batches, 5);
+      console.log(`[Studio Pipeline] Step: Extracting segments from ${batches.length} batch(es) for type '${type}'...`);
+      const segments = await extractBatchSegments(batches, 5, type);
 
-      console.log(`[Studio Pipeline] Step: Reconciling ${segments.length} segment(s) into chapters...`);
-      return await reconcileOutline(segments, title);
+      console.log(`[Studio Pipeline] Step: Reconciling ${segments.length} segment(s) into chapters for type '${type}'...`);
+      return await reconcileOutline(segments, title, type);
     });
 
     // Step 3: Save outline to MongoDB Workspace source

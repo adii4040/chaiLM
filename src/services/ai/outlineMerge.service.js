@@ -1,5 +1,5 @@
 import { zodResponseFormat } from "openai/helpers/zod";
-import { openai } from "../../lib/openai.lib.js";
+import { gemini } from "../../lib/gemini.lib.js";
 import { config } from "../../config/env.js";
 import { OutlineSchema } from "../../utils/responseSchema.utils.js";
 
@@ -89,12 +89,12 @@ export function preMergeCollidingSegments(segments, overlapThreshold = 0.5) {
  * @param {string} [documentTitle="Untitled Source"] - Title of the document
  * @returns {Promise<{ chapters: Array<{ chapterIndex: number, chapterTitle: string, rangeLabel: string, rangeStart: number, rangeEnd: number, summary: string, takeaways: string[], terms: Array<{term: string, definition: string}> }> }>}
  */
-export async function reconcileOutline(segments, documentTitle = "Untitled Source") {
+export async function reconcileOutline(segments, documentTitle = "Untitled Source", sourceType = null) {
   if (!Array.isArray(segments) || segments.length === 0) {
     return { chapters: [] };
   }
 
-  const modelName = config.openai.outlineModel || "gpt-5-mini";
+  const modelName = config.gemini?.outlineModel || process.env.OUTLINE_MODEL || "gemini-3.5-flash-lite";
 
 
   // 1. Programmatically collapse boundary overlap collisions
@@ -105,27 +105,29 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
   }));
 
   const sampleLabel = cleanSegments[0]?.rangeLabel || "";
-  const isTimestamp = sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500);
-  const isPage = sampleLabel.toLowerCase().includes("page");
+  const isMedia = sourceType === "youtube" || sourceType === "audio";
+  const isPage = sourceType ? (sourceType === "pdf" || sourceType === "web") : sampleLabel.toLowerCase().includes("page");
+  const isTimestamp = isMedia || (!isPage && (sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500)));
 
   const groupingGuidance = isPage
     ? "DOCUMENT / PDF GROUPING RULES:\n" +
-      "- Group approximately 2 to 6 pages (or 6 to 12 pages for very large 100+ page documents) into ONE comprehensive section (e.g. Pages 1-3, Pages 4-6, Pages 7-10).\n" +
-      "- ALL rangeStart and rangeEnd coordinates MUST be whole positive integers representing actual page numbers (e.g. 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99.\n" +
-      "- Do NOT output tiny 1-page chapters unless the entire document is very short, and do NOT lump entire 50-page blobs together. Each section must group logically related segments into a cohesive thematic block.\n" +
-      "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
-      "- Target approximately 4 to 8 total sections for short-to-medium documents (10-40 pages), or 8 to 15 sections for large documents (100+ pages)."
+    "- Group approximately 2 to 6 pages (or 6 to 12 pages for very large 100+ page documents) into ONE comprehensive section (e.g. Pages 1-3, Pages 4-6, Pages 7-10).\n" +
+    "- ALL rangeStart and rangeEnd coordinates MUST be whole positive integers representing actual page numbers (e.g. 1, 2, 3). NEVER output fractional or decimal page numbers like 7.4 or 9.99.\n" +
+    "- Do NOT output tiny 1-page chapters unless the entire document is very short, and do NOT lump entire 50-page blobs together. Each section must group logically related segments into a cohesive thematic block.\n" +
+    "- Name each section with a clear thematic title, e.g. 'Section 1: Executive Overview & Architecture', 'Section 2: Web Services Security Standards'.\n" +
+    "- Target approximately 4 to 8 total sections for short-to-medium documents (10-40 pages), or 8 to 15 sections for large documents (100+ pages)."
     : "AUDIO / VIDEO GROUPING RULES:\n" +
-      "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
-      "- All coordinates should be whole integer seconds.\n" +
-      "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
-      "- Target 4 to 7 focused chapters for a 20-30 minute video, and 5 to 9 chapters for a 1-hour stream.";
+    "- Group segments into balanced 3 to 8 minute chapters for shorter media (<30 mins) or 8 to 12 minute chapters for long streams.\n" +
+    "- All coordinates should be whole integer seconds.\n" +
+    "- Do NOT output 1-minute micro-chapters, and do NOT lump entire 15-minute storylines with multiple scene pivots into 1 giant chapter.\n" +
+    "- Target 4 to 7 focused chapters for a 20-30 minute video, 5 to 9 chapters for a 1-hour stream, or 10 to 18 chapters for 2-3+ hour streams.";
 
   console.log(`[Studio Outline Merge] Reconciling ${cleanSegments.length} deduplicated segment(s) (down from ${segments.length} raw) for "${documentTitle}" (${isPage ? "PDF/Document" : "Media/Audio"})...`);
 
   try {
-    const completion = await openai.chat.completions.parse({
+    const completion = await gemini.chat.completions.parse({
       model: modelName,
+      ...(modelName.includes("gpt-5") || modelName.startsWith("o") ? { reasoning_effort: "low" } : {}),
       messages: [
         {
           role: "system",
@@ -176,9 +178,9 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     }
 
     // 2. Post-processing guarantee: Ensure mathematical boundary calculation and zero gaps
-    const sampleLabel = cleanSegments[0]?.rangeLabel || "";
-    const isTimestamp = sampleLabel.includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500);
-    const isPage = sampleLabel.toLowerCase().includes("page");
+    const isMedia = sourceType === "youtube" || sourceType === "audio";
+    const isPage = sourceType ? (sourceType === "pdf" || sourceType === "web") : (cleanSegments[0]?.rangeLabel || "").toLowerCase().includes("page");
+    const isTimestamp = isMedia || (!isPage && ((cleanSegments[0]?.rangeLabel || "").includes(":") || cleanSegments.some((s) => typeof s.rangeEnd === "number" && s.rangeEnd > 500)));
 
     const formatTs = (sec) => {
       const s = Math.floor(sec || 0);
@@ -277,12 +279,12 @@ export async function reconcileOutline(segments, documentTitle = "Untitled Sourc
     chapters = chapters.map((chap) => {
       let formattedLabel = chap.rangeLabel;
       if (typeof chap.rangeStart === "number" && typeof chap.rangeEnd === "number") {
-        if (isPage) {
+        if (isTimestamp) {
+          formattedLabel = `${formatTs(chap.rangeStart)}-${formatTs(chap.rangeEnd)}`;
+        } else if (isPage) {
           const s = Math.round(chap.rangeStart);
           const e = Math.round(chap.rangeEnd);
           formattedLabel = s === e ? `Page ${s}` : `Pages ${s}-${e}`;
-        } else if (isTimestamp) {
-          formattedLabel = `${formatTs(chap.rangeStart)}-${formatTs(chap.rangeEnd)}`;
         }
       }
       return {

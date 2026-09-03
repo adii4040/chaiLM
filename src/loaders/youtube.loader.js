@@ -173,9 +173,11 @@ export async function getYoutubeUnits(input, windowSeconds = 120) {
 
   const formatTs = (sec) => {
     const s = Math.floor(sec || 0);
-    const m = Math.floor(s / 60);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
     const remSec = s % 60;
     const pad = (n) => String(n).padStart(2, "0");
+    if (h > 0) return `${pad(h)}:${pad(m)}:${pad(remSec)}`;
     return `${pad(m)}:${pad(remSec)}`;
   };
 
