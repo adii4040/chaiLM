@@ -1,15 +1,55 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { firecrawlApp } from "../lib/index.js";
 import { config } from "../config/env.js";
+import { SourceCache } from "../models/SourceCache.model.js";
 
 export async function scrapWebsite(url) {
-  try {
-    const scrapeResult = await firecrawlApp.scrape(url, { formats: ['markdown'] });
-    console.log("Scraped content successfully", scrapeResult);
-    const markdown = scrapeResult.markdown || scrapeResult.data?.markdown || "";
-    console.log("[Web Processor] Scraped markdown content logged successfully.");
+  const normalizedUrl = (url || "").trim();
+  if (!normalizedUrl) {
+    throw new Error("Missing website URL to scrape");
+  }
 
-    const title = scrapeResult.metadata?.title || scrapeResult.data?.metadata?.title || url;
+  // 1. Check SourceCache in MongoDB
+  try {
+    const cached = await SourceCache.findOne({ key: normalizedUrl, type: "website" });
+    if (cached?.data?.markdown) {
+      console.log(`[SourceCache] HIT for website: ${normalizedUrl} ("${cached.title}")`);
+      return {
+        markdown: cached.data.markdown,
+        title: cached.data.title || cached.title || normalizedUrl,
+      };
+    }
+  } catch (cacheErr) {
+    console.warn(`[SourceCache] Read error for website ${normalizedUrl}:`, cacheErr.message);
+  }
+
+  // 2. Scrape via Firecrawl
+  try {
+    console.log(`[Web Processor] Cache MISS. Scraping website via Firecrawl: ${normalizedUrl}...`);
+    const scrapeResult = await firecrawlApp.scrape(normalizedUrl, { formats: ['markdown'] });
+    const markdown = scrapeResult.markdown || scrapeResult.data?.markdown || "";
+    const title = scrapeResult.metadata?.title || scrapeResult.data?.metadata?.title || normalizedUrl;
+
+    console.log(`[Web Processor] Scraped markdown content successfully for: ${title}`);
+
+    // 3. Save to SourceCache asynchronously
+    try {
+      await SourceCache.findOneAndUpdate(
+        { key: normalizedUrl, type: "website" },
+        {
+          key: normalizedUrl,
+          type: "website",
+          url: normalizedUrl,
+          title,
+          data: { markdown, title },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      console.log(`[SourceCache] STORED scrape result for website: ${normalizedUrl}`);
+    } catch (saveErr) {
+      console.warn(`[SourceCache] Write error for website ${normalizedUrl}:`, saveErr.message);
+    }
+
     return { markdown, title };
   } catch (error) {
     console.error("[Web Processor] Firecrawl Scraping Error:", error);

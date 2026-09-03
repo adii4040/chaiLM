@@ -177,15 +177,25 @@ export const MindMapSchema = z.object({
 export const AudioOverviewSchema = z.object({
   episodeTitle: z.string().describe("Engaging title for the podcast episode"),
   summary: z.string().describe("Short synopsis of the episode"),
+  podcastType: z.string().describe(
+    "The format/style of the podcast (e.g. 'debate', 'casual banter', 'deep-dive technical', 'storytelling', 'investigative')"
+  ),
+  mood: z.string().describe(
+    "The dominant emotional atmosphere and tonal vibe of the hosts (e.g. 'humorous & witty', 'intense & provocative', 'friendly & conversational', 'analytical & rigorous')"
+  ),
   durationMinutesEstimate: z.number().describe("Estimated spoken duration in minutes"),
   dialogue: z.array(
     z.object({
       speaker: z.enum(["Host 1", "Host 2"]).describe("Speaker identifier"),
-      text: z.string().describe("Spoken dialogue utterance"),
-      tone: z.string().describe("Vocal direction or tone, e.g. 'enthusiastic', 'inquisitive', 'analytical'"),
+      text: z.string().describe(
+        "Substantial spoken dialogue turn containing multiple full sentences (at least 30-45 words). Never output short 1-line quips or brief acknowledgments."
+      ),
+      tone: z.string().describe(
+        "Vocal direction or tone reflecting the requested podcast mood, e.g. 'enthusiastic', 'inquisitive', 'analytical', 'playfully sarcastic', 'dramatic'"
+      ),
       ai_instruction: z.string().describe(
-        "Natural-language delivery instruction for a TTS voice model — pacing, emphasis, emotional coloring, pauses. E.g. 'Speak with rising excitement, slight emphasis on the word seismic, quick pace.'"
+        "Natural-language delivery instruction for a TTS voice model embodying the requested mood — pacing, emphasis, emotional coloring, pauses. E.g. 'Speak with rising excitement, slight pause before the key concept for dramatic effect.'"
       ),
     })
-  ).describe("Turn-by-turn conversational podcast transcript"),
+  ).describe("Turn-by-turn conversational podcast transcript strictly embodying the requested mood and format"),
 });
