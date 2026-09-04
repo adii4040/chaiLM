@@ -194,17 +194,57 @@ async function resolveWorkspaceAndSource(workspaceId, sourceId, userId) {
       throw new Error("Source not found in workspace");
     }
   } else {
-    // Default to the first source with completed outline
-    source = workspace.sources.find(
-      (s) => s.studioOutlineStatus === "COMPLETED" && s.summaryOutline?.chapters?.length > 0
+    // Default to the first source with completed outline or first source in workspace
+    source =
+      workspace.sources.find(
+        (s) => s.studioOutlineStatus === "COMPLETED" && s.summaryOutline?.chapters?.length > 0
+      ) || workspace.sources[0];
+  }
+
+  if (!source) {
+    throw new Error("No source found in workspace");
+  }
+
+  const status = source.studioOutlineStatus || "NOT_STARTED";
+  const effectiveUserId = userId || workspace.userId;
+
+  // 1. If currently processing, do NOT re-run; notify client with 202
+  if (status === "PROCESSING") {
+    const error = new Error("Summarization is currently in progress. Please wait a moment.");
+    error.statusCode = 202;
+    error.status = "PROCESSING";
+    error.sourceId = source.sourceId;
+    throw error;
+  }
+
+  // 2. If FAILED or NOT_STARTED or missing outline, auto-trigger extraction pipeline
+  if (status === "FAILED" || status === "NOT_STARTED" || !source.summaryOutline?.chapters?.length) {
+    console.log(
+      `[Studio Controller] Auto-triggering outline extraction for source ${source.sourceId} ("${source.title}") with status '${status}'...`
     );
+    await updateStudioOutlineStatus(workspaceId, effectiveUserId, source.sourceId, "PROCESSING");
+
+    await inngest.send({
+      name: "studio/outline.requested",
+      data: {
+        workspaceId,
+        userId: effectiveUserId.toString(),
+        sourceId: source.sourceId,
+        type: source.sourceType,
+        url: source.sourceUrl,
+        filePath: source.sourceUrl,
+        originalName: source.title,
+      },
+    });
+
+    const error = new Error("Summarization has been initiated in the background. Please wait a moment.");
+    error.statusCode = 202;
+    error.status = "PROCESSING";
+    error.sourceId = source.sourceId;
+    throw error;
   }
 
-  if (!source || source.studioOutlineStatus !== "COMPLETED" || !source.summaryOutline?.chapters?.length) {
-    throw new Error("Source master outline is not ready. Please ensure the studio outline is extracted first.");
-  }
-
-  return { workspace, source, effectiveUserId: userId || workspace.userId };
+  return { workspace, source, effectiveUserId };
 }
 
 
@@ -247,6 +287,14 @@ export async function generateStudyGuide(req, res) {
       artifact,
     });
   } catch (error) {
+    if (error.statusCode === 202) {
+      return res.status(202).json({
+        success: false,
+        status: error.status || "PROCESSING",
+        message: error.message,
+        sourceId: error.sourceId,
+      });
+    }
     console.error("[Studio Controller] generateStudyGuide error:", error);
     return res.status(400).json({ error: error.message });
   }
@@ -296,6 +344,14 @@ export async function generateFlashcards(req, res) {
       artifact,
     });
   } catch (error) {
+    if (error.statusCode === 202) {
+      return res.status(202).json({
+        success: false,
+        status: error.status || "PROCESSING",
+        message: error.message,
+        sourceId: error.sourceId,
+      });
+    }
     console.error("[Studio Controller] generateFlashcards error:", error);
     return res.status(400).json({ error: error.message });
   }
@@ -348,6 +404,14 @@ export async function generateQuiz(req, res) {
       artifact,
     });
   } catch (error) {
+    if (error.statusCode === 202) {
+      return res.status(202).json({
+        success: false,
+        status: error.status || "PROCESSING",
+        message: error.message,
+        sourceId: error.sourceId,
+      });
+    }
     console.error("[Studio Controller] generateQuiz error:", error);
     return res.status(400).json({ error: error.message });
   }
@@ -392,6 +456,14 @@ export async function generateMindMap(req, res) {
       artifact,
     });
   } catch (error) {
+    if (error.statusCode === 202) {
+      return res.status(202).json({
+        success: false,
+        status: error.status || "PROCESSING",
+        message: error.message,
+        sourceId: error.sourceId,
+      });
+    }
     console.error("[Studio Controller] generateMindMap error:", error);
     return res.status(400).json({ error: error.message });
   }
@@ -427,8 +499,11 @@ export async function generateAudioOverview(req, res) {
       metadata: {
         sourceTitle: source.title,
         sourceType: source.sourceType,
+        targetMinutes: Number(options?.length) === 3 ? 3 : 5,
+        podcastType: audioData.podcastType || options?.podcastType || options?.type || "conversational deep-dive",
+        mood: audioData.mood || options?.mood || options?.vibe || "engaging & lively",
         dialogueTurns: audioData.dialogue?.length || 0,
-        durationMinutesEstimate: audioData.durationMinutesEstimate || 5,
+        durationMinutesEstimate: audioData.durationMinutesEstimate || (Number(options?.length) === 3 ? 3 : 5),
       },
     });
 
@@ -446,6 +521,14 @@ export async function generateAudioOverview(req, res) {
       artifact,
     });
   } catch (error) {
+    if (error.statusCode === 202) {
+      return res.status(202).json({
+        success: false,
+        status: error.status || "PROCESSING",
+        message: error.message,
+        sourceId: error.sourceId,
+      });
+    }
     console.error("[Studio Controller] generateAudioOverview error:", error);
     return res.status(400).json({ error: error.message });
   }

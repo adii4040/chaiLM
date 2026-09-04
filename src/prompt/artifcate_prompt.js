@@ -101,10 +101,6 @@ export function buildArtifactPrompt({
   const systemPrompt = `${BASE_ARTIFACT_SYSTEM_PROMPT}\n\nARTIFACT ROLE SPECIFICATION:\nYou are generating the artifact "${type}" following the exact schema provided.`;
   const artifactPrompt = typeSpecificPrompt;
 
-
-  console.log("systemPrompt", systemPrompt);
-  console.log("userPrompt", userPrompt);
-
   return {
     systemPrompt,
     artifactPrompt,
