@@ -1,6 +1,7 @@
 import axios from "axios";
 import { Document } from "@langchain/core/documents";
 import { config } from "../config/env.js";
+import { SourceCache } from "../models/SourceCache.model.js";
 
 function extractVideoId(url) {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -49,24 +50,7 @@ export async function processYouTube(youtubeUrl) {
   const videoId = extractVideoId(youtubeUrl);
 
   try {
-    console.log(`[YouTube Processor] Fetching transcript for video ID: ${videoId}...`);
-    const response = await axios.get("https://transcriptapi.com/api/v2/youtube/transcript", {
-      params: {
-        video_url: videoId,
-        format: "json",
-        send_metadata: "true",
-      },
-      headers: {
-        Authorization: `Bearer ${config.transcriptApi.apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    const { transcript, metadata, language } = response.data;
-
-    if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
-      throw new Error("No transcript available for this video");
-    }
+    const { transcript, metadata, language } = await fetchRawYouTubeTranscript(youtubeUrl);
 
     console.log("[YouTube Processor] YouTube content detected. Preserving timestamp integrity during chunking...");
     const rawChunks = chunkTranscriptWithTimestamps(transcript, {
@@ -110,13 +94,32 @@ export async function processYouTube(youtubeUrl) {
 }
 
 /**
- * Fetches raw transcript entries from transcript API
+ * Fetches raw transcript entries from DB cache or Transcript API
  * @param {string} youtubeUrl
- * @returns {Promise<{ transcript: Array, metadata: Object, videoId: string }>}
+ * @returns {Promise<{ transcript: Array, metadata: Object, videoId: string, language?: string }>}
  */
 export async function fetchRawYouTubeTranscript(youtubeUrl) {
   const videoId = extractVideoId(youtubeUrl);
+
+  // 1. Check SourceCache in MongoDB
   try {
+    const cached = await SourceCache.findOne({ key: videoId, type: "youtube" });
+    if (cached?.data?.transcript?.length) {
+      console.log(`[SourceCache] HIT for YouTube video: ${videoId} ("${cached.title}")`);
+      return {
+        transcript: cached.data.transcript,
+        metadata: cached.data.metadata || {},
+        videoId,
+        language: cached.data.language,
+      };
+    }
+  } catch (cacheErr) {
+    console.warn(`[SourceCache] Read error for YouTube video ${videoId}:`, cacheErr.message);
+  }
+
+  // 2. Fetch from external Transcript API
+  try {
+    console.log(`[YouTube Processor] Cache MISS. Fetching transcript from API for video ID: ${videoId}...`);
     const response = await axios.get("https://transcriptapi.com/api/v2/youtube/transcript", {
       params: {
         video_url: videoId,
@@ -129,12 +132,33 @@ export async function fetchRawYouTubeTranscript(youtubeUrl) {
       },
     });
 
-    const { transcript, metadata } = response.data;
+    const { transcript, metadata, language } = response.data;
     if (!transcript || !Array.isArray(transcript) || transcript.length === 0) {
       throw new Error("No transcript available for this video");
     }
 
-    return { transcript, metadata: metadata || {}, videoId };
+    const title = metadata?.title || "YouTube Video";
+
+    // 3. Save to SourceCache asynchronously
+    try {
+      await SourceCache.findOneAndUpdate(
+        { key: videoId, type: "youtube" },
+        {
+          key: videoId,
+          type: "youtube",
+          url: youtubeUrl,
+          title,
+          videoId,
+          data: { transcript, metadata: metadata || {}, language },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      console.log(`[SourceCache] STORED transcript for YouTube video: ${videoId}`);
+    } catch (saveErr) {
+      console.warn(`[SourceCache] Write error for YouTube video ${videoId}:`, saveErr.message);
+    }
+
+    return { transcript, metadata: metadata || {}, videoId, language };
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const statusCode = error.response?.status;
