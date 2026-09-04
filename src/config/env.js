@@ -20,6 +20,7 @@ export const config = {
 
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
+    outlineModel: process.env.OUTLINE_MODEL || "gemini-3.5-flash-lite",
   },
   transcriptApi: {
     apiKey: process.env.TRANSCRIPT_API_KEY,

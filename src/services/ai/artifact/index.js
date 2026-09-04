@@ -4,3 +4,5 @@ export { generateFlashcardsArtifact } from "./flashcards.generator.js";
 export { generateQuizArtifact } from "./quiz.generator.js";
 export { generateMindMapArtifact } from "./mindmap.generator.js";
 export { generateAudioOverviewArtifact } from "./audioOverview.generator.js";
+export { synthesizeDialogueAudio } from "./synthesizeDialogueAudio.service.js";
+export { stitchDialogueAudio } from "./audioStitcher.service.js";

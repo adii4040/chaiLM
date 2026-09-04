@@ -34,7 +34,8 @@ export function formatAudioOverviewPrompt({ sourceTitle, sourceType = "document"
     `2. Natural Conversational Flow: Include genuine back-and-forth banter, reactions ("Exactly", "That's a great point", "Wait, why is that?"), and smooth transitions between sections.\n` +
     `3. Concept Explanations: Never just read bullet points. Explain *why* things matter using analogies, intuitive breakdowns, and real-world implications.\n` +
     `4. Tone Direction: Set the \`tone\` property for each dialogue turn (e.g. "enthusiastic", "curious", "analytical", "humorous", "reflective").\n` +
-    `5. Structure: Opening hook -> Thematic deep dives -> Practical conclusions / sign-off.\n\n` +
+    `5. TTS Delivery Instruction: For each turn, also write an \`ai_instruction\` — a short, natural-language instruction for a text-to-speech voice model describing exactly how the line should be spoken: pacing, emphasis on specific words, pauses, energy level. This is delivery guidance for an AI voice, not a restatement of the tone label. Example: "Speak quickly with genuine excitement, slight pause before the final word for effect."\n` +
+    `6. Structure: Opening hook -> Thematic deep dives -> Practical conclusions / sign-off.\n\n` +
     `SOURCE MASTER OUTLINE & SUMMARY DATA:\n` +
     `Document: ${sourceTitle} (Type: ${sourceType})\n\n` +
     `${formattedChapters}`

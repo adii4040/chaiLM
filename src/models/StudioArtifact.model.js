@@ -15,6 +15,13 @@ const StudioArtifactSchema = new mongoose.Schema(
     title: { type: String, required: true },
     data: { type: mongoose.Schema.Types.Mixed, required: true },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    audioStatus: {
+      type: String,
+      enum: ["pending", "processing", "ready", "failed"],
+      default: undefined,
+    },
+    audioUrl: { type: String, default: null },
+    audioError: { type: String, default: null },
   },
   { timestamps: true }
 );
