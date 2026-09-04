@@ -9,10 +9,8 @@ const openai = new OpenAI({ apiKey: config.openai.apiKey });
 export async function synthesizeAnswer(userQuery, retrievedChunks) {
   const fullSystemPrompt = buildPrompt(retrievedChunks);
 
-  console.log('FINAL SYSTEM PROMPT: ', fullSystemPrompt);
-
   try {
-    const completion = await openai.chat.completions.parse({  
+    const completion = await openai.chat.completions.parse({
       model: config.openai.chatModel || "gpt-4o-mini",
       temperature: 0.2,
       messages: [
