@@ -96,6 +96,8 @@ export async function handleGetWorkspaceData(req, res) {
           query: msg.query,
           answer: msg.answer,
           sources: msg.sources,
+          isError: msg.isError || false,
+          error: msg.error || null,
           createdAt: msg.createdAt,
         })),
       },
