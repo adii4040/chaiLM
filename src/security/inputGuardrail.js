@@ -1,4 +1,3 @@
-// server/src/security/inputGuardrail.js
 import { runGuardrails } from "@openai/guardrails";
 import { openai } from "../lib/openai.lib.js";
 
@@ -51,10 +50,9 @@ export async function checkUserInput(query) {
       trimmedQuery,
       JAILBREAK_BUNDLE,
       { guardrailLlm: openai, client: openai },
-      true // raiseGuardrailErrors = true for fail-closed safety
+      true
     );
 
-    // Check if any guardrail tripwire was triggered
     const isJailbreak =
       Array.isArray(results) &&
       results.some((r) => r?.tripwireTriggered);
@@ -68,12 +66,9 @@ export async function checkUserInput(query) {
 
     return { passed: true };
   } catch (error) {
-    // If it's our own intentional 400 rejection from above, rethrow directly
     if (error.statusCode === 400) {
       throw error;
     }
-
-    // Fail-Closed Behavior: Guardrail execution/API failure stops the pipeline
     console.error(
       "[InputGuardrail] ❌ Jailbreak guardrail execution failed. Request rejected.",
       error?.message || error

@@ -1,5 +1,3 @@
-// server/src/security/contextGuardrail.js
-
 /**
  * Unicode normalization and invisible character stripping.
  * Returns a normalized, lowercase string for deterministic pattern analysis
@@ -10,13 +8,9 @@ export function normalizeText(text) {
 
   return (
     text
-      // 1. Unicode NFKC Canonical Normalization
       .normalize("NFKC")
-      // 2. Strip invisible, zero-width, and directional control characters
       .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u180E\u202A-\u202E\u2066-\u2069]/g, "")
-      // 3. Consolidate consecutive whitespace, tabs, and line breaks
       .replace(/\s+/g, " ")
-      // 4. Lowercase for case-insensitive matching
       .toLowerCase()
       .trim()
   );
@@ -115,7 +109,7 @@ function evaluateChunk(chunkText) {
       if (pattern.test(normalized)) {
         score += signal.weight;
         categoryMatched = true;
-        break; // Count each category once
+        break;
       }
     }
     if (categoryMatched) {
@@ -123,15 +117,10 @@ function evaluateChunk(chunkText) {
     }
   }
 
-  // Check if text is descriptive security documentation
   const isDescriptive = DESCRIPTIVE_PATTERNS.some((p) => p.test(normalized));
   if (isDescriptive && score > 0) {
-    // Dampen isolated mentions in legitimate security documentation
     score = Math.max(0, score - 2.0);
   }
-
-  // High Risk Threshold: Requires either a strong combined signal (e.g. Precedence + Exfiltration >= 3.5)
-  // or at least 2 distinct signal categories.
   const isFlagged = score >= 3.5 || matchedCategories.length >= 2;
 
   return {
@@ -149,7 +138,6 @@ function evaluateChunk(chunkText) {
  * @returns {Object} { safeChunks, flaggedChunks, summary }
  */
 export function scanRetrievedContext(chunks = [], options = {}) {
-  // Fail-closed defensive check
   if (!Array.isArray(chunks)) {
     console.warn("[ContextGuardrail] Input chunks is not an array. Failing closed with empty safeChunks.");
     return {
@@ -181,13 +169,10 @@ export function scanRetrievedContext(chunks = [], options = {}) {
           matchedCategories: evaluation.matchedCategories,
           chunkRef: chunk,
         });
-
-        // Security logging: Log event metadata without leaking full document text
         console.warn(
           `[ContextGuardrail] 🛡️ Quarantined suspicious chunk [index: ${index}, sourceId: ${sourceId}, title: "${title}"] - Risk Score: ${evaluation.score}, Signals: [${evaluation.matchedCategories.join(", ")}]`
         );
       } else {
-        // Safe chunk: Preserved completely with original pageContent & metadata
         safeChunks.push(chunk);
       }
     });
@@ -202,7 +187,6 @@ export function scanRetrievedContext(chunks = [], options = {}) {
       },
     };
   } catch (error) {
-    // Fail-closed behavior: If guardrail fails unexpectedly, do not pass uninspected chunks
     console.error("[ContextGuardrail] Unexpected error during context scanning. Failing closed:", error);
     return {
       safeChunks: [],

@@ -3,14 +3,18 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { config } from "../../config/env.js";
 import { buildPrompt } from "../../prompt/buildPrompt.js";
 import { StructuredFinalResponseSchema } from "../../utils/responseSchema.utils.js";
+import { checkGeneratedOutput } from "../../security/outputGuardrail.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-export async function synthesizeAnswer(userQuery, retrievedChunks) {
+export async function synthesizeAnswer(userQuery, retrievedChunks, options = {}) {
   const fullSystemPrompt = buildPrompt(retrievedChunks);
+  const client = options.client || openai;
+
+  let finalAnswer;
 
   try {
-    const completion = await openai.chat.completions.parse({
+    const completion = await client.chat.completions.parse({
       model: config.openai.chatModel || "gpt-4o-mini",
       temperature: 0.2,
       messages: [
@@ -20,10 +24,10 @@ export async function synthesizeAnswer(userQuery, retrievedChunks) {
       response_format: zodResponseFormat(StructuredFinalResponseSchema, "rag_response"),
     });
 
-    return completion.choices[0].message.parsed;
+    finalAnswer = completion.choices[0].message.parsed;
   } catch (error) {
     console.error("RAG Response Generation Error:", error);
-    return {
+    finalAnswer = {
       overallSummary: "I found relevant information across your selected document sources.",
       sections: [
         {
@@ -44,4 +48,8 @@ export async function synthesizeAnswer(userQuery, retrievedChunks) {
       ],
     };
   }
+
+  await checkGeneratedOutput(finalAnswer, options.guardrailOptions);
+
+  return finalAnswer;
 }
