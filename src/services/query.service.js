@@ -5,6 +5,8 @@ import {
   rerankDocuments,
   synthesizeAnswer
 } from "./ai/index.js";
+import { checkUserInput } from "../security/inputGuardrail.js";
+import { scanRetrievedContext } from "../security/contextGuardrail.js";
 import { reciprocalRankFusion } from "../utils/rrf.utils.js";
 import { formatSecondsToTimestamp } from "../utils/timestampFormatter.utils.js";
 import { ChatMessage } from "../models/ChatMessage.model.js";
@@ -205,6 +207,9 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
   // 1. Verify workspace exists and user has access before doing any processing
   const workspaceDoc = await verifyWorkSpace(workspaceId, userId);
 
+  // 1.5. Input Jailbreak Guardrail: Inspect user query BEFORE query translation, HyDE, retrieval, or synthesis
+  await checkUserInput(query);
+
   // 2. Resolve and validate selectedSourceIds against workspace sources
   const targetSourceFilters = await getSourceFilters(workspaceDoc, selectedSourceIds);
 
@@ -234,11 +239,20 @@ export async function processQueryPipeline({ query, workspaceId, userId, selecte
 
   const finalChunks = rerankedDocs.length > 0 ? rerankedDocs : topChunksToRerank;
 
-  // 9. Synthesize final structured response with citations
-  const parsedAnswer = await synthesizeAnswer(query, finalChunks);
+  // 8.5. Inspect retrieved context chunks through security guardrail
+  const { safeChunks, flaggedChunks, summary } = scanRetrievedContext(finalChunks);
 
-  // 10. Format citations/sources with structured metadata & deep links
-  const formattedSources = await formatSources(finalChunks);
+  if (flaggedChunks.length > 0) {
+    console.warn(
+      `[Query Pipeline] 🛡️ Security Guardrail quarantined ${flaggedChunks.length}/${summary.totalEvaluated} chunks for query: "${query.slice(0, 80)}"`
+    );
+  }
+
+  // 9. Synthesize final structured response with citations using safe chunks
+  const parsedAnswer = await synthesizeAnswer(query, safeChunks);
+
+  // 10. Format citations/sources with structured metadata & deep links using safe chunks
+  const formattedSources = await formatSources(safeChunks);
 
   // 11. Persist user query and assistant response to MongoDB ChatMessage collection in parallel
   try {

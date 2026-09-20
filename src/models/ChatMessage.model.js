@@ -40,6 +40,8 @@ const ChatMessageSchema = new mongoose.Schema(
     query: { type: String, default: null }, // Filled if role === 'user'
     answer: { type: AnswerSchema, default: null }, // Filled if role === 'assistant'
     sources: { type: Array, default: [] }, // Retrieved grounding sources
+    isError: { type: Boolean, default: false },
+    error: { type: String, default: null },
   },
   { timestamps: true }
 );
