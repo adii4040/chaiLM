@@ -161,3 +161,111 @@ export async function verifySubscription(req, res) {
         });
     }
 }
+
+export async function getBillingDetails(req, res) {
+    try {
+        const userId = req.user._id;
+
+        // Read only from local MongoDB
+        const subscription = await Subscription.findOne({
+            user: userId,
+            status: { $in: ["authenticated", "active", "pending", "paused"] },
+        }).sort({ createdAt: -1 });
+
+        if (!subscription) {
+            return res.status(200).json({
+                success: true,
+                billing: {
+                    plan: "free",
+                    planName: "Free",
+                    status: "none",
+                    currentStart: null,
+                    currentEnd: null,
+                    cancelAtCycleEnd: false,
+                },
+            });
+        }
+
+        const plan = await Plan.findOne({ key: subscription.planKey });
+
+        return res.status(200).json({
+            success: true,
+            billing: {
+                plan: subscription.planKey,
+                planName: plan?.name || "ChaiLM Pro",
+                amount: plan?.amount || 49900,
+                period: plan?.period || "monthly",
+                status: subscription.status,
+                currentStart: subscription.currentStart,
+                currentEnd: subscription.currentEnd,
+                cancelAtCycleEnd: subscription.cancelAtCycleEnd,
+            },
+        });
+    } catch (err) {
+        console.error("getBillingDetails failed:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Could not fetch billing details",
+        });
+    }
+}
+
+export async function cancelSubscription(req, res) {
+    try {
+        const userId = req.user._id;
+
+        const subscription = await Subscription.findOne({
+            user: userId,
+            status: { $in: ["authenticated", "active", "pending", "paused"] },
+        }).sort({ createdAt: -1 });
+
+        if (!subscription) {
+            return res.status(404).json({
+                success: false,
+                message: "No active subscription found to cancel",
+            });
+        }
+
+        // Cancel at the end of the billing cycle in Razorpay
+        await razorpay.subscriptions.cancel(subscription.razorpaySubscriptionId, true);
+
+        // Fetch authoritative updated subscription from Razorpay
+        const remoteSub = await razorpay.subscriptions.fetch(subscription.razorpaySubscriptionId);
+
+        // Explicitly mark cycle end cancellation on our subscription model
+        subscription.cancelAtCycleEnd = true;
+        if (remoteSub?.status) subscription.status = remoteSub.status;
+        if (remoteSub?.current_end) {
+            subscription.currentEnd = new Date(remoteSub.current_end * 1000);
+        }
+        await subscription.save();
+
+        // Sync user document
+        await applyRazorpaySubscriptionToDb(remoteSub, userId);
+        
+        // Re-ensure cancelAtCycleEnd remains true
+        subscription.cancelAtCycleEnd = true;
+        await subscription.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Subscription will cancel at the end of the current billing cycle",
+            billing: {
+                plan: subscription.planKey,
+                status: subscription.status,
+                currentEnd: subscription.currentEnd,
+                cancelAtCycleEnd: true,
+            },
+        });
+    } catch (err) {
+        console.error("cancelSubscription failed:", {
+            userId: String(req.user?._id),
+            statusCode: err?.statusCode,
+            message: err?.error?.description ?? err?.message,
+        });
+        return res.status(500).json({
+            success: false,
+            message: err?.error?.description || "Could not cancel subscription",
+        });
+    }
+}

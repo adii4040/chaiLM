@@ -82,8 +82,11 @@ export async function applyRazorpaySubscriptionToDb(rzpSubEntity, userId = null)
   const updateFields = {
     status: rzpSubEntity.status,
     totalCount: rzpSubEntity.total_count,
-    cancelAtCycleEnd: Boolean(rzpSubEntity.ended_at || rzpSubEntity.cancel_at_cycle_end),
   };
+
+  if (rzpSubEntity.cancel_at_cycle_end !== undefined || rzpSubEntity.ended_at) {
+    updateFields.cancelAtCycleEnd = Boolean(rzpSubEntity.ended_at || rzpSubEntity.cancel_at_cycle_end);
+  }
 
   if (currentStart) updateFields.currentStart = currentStart;
   if (currentEnd) updateFields.currentEnd = currentEnd;
@@ -101,6 +104,7 @@ export async function applyRazorpaySubscriptionToDb(rzpSubEntity, userId = null)
       planKey: rzpSubEntity.notes?.planKey || "pro_monthly",
       razorpayPlanId: rzpSubEntity.plan_id,
       razorpaySubscriptionId: rzpSubEntity.id,
+      cancelAtCycleEnd: Boolean(rzpSubEntity.ended_at || rzpSubEntity.cancel_at_cycle_end),
       ...updateFields,
     });
   } else {
