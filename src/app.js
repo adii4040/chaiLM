@@ -8,6 +8,8 @@ import userRoutes from './routes/user.routes.js';
 import inngestRouter from './routes/inngest.routes.js';
 import studioRoutes from './routes/studio.routes.js';
 import healthRoutes from './routes/health.routes.js';
+import planRoutes from './routes/plan.routes.js';
+import subscriptionRoutes from './routes/subscription.routes.js';
 
 const app = express();
 
@@ -35,5 +37,7 @@ app.use('/api/query', queryRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/studio', studioRoutes);
+app.use('/api/plans', planRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 export default app;
