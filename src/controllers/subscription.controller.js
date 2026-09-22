@@ -3,7 +3,8 @@ import { razorpay } from "../lib/razorpay.js";
 import { Plan } from "../models/plan.model.js";
 import { Subscription, LIVE_STATUSES } from "../models/subscription.model.js";
 import { config } from "../config/env.js";
-import { applyRazorpaySubscriptionToDb } from "../services/subscription.service.js";
+import { applyRazorpaySubscriptionToDb, getEffectivePlan } from "../services/subscription.service.js";
+import { getPlanEntitlements } from "../config/planConfig.js";
 
 const TOTAL_COUNT_BY_PERIOD = { monthly: 120, yearly: 10 }; // verify against Razorpay's limits
 
@@ -165,6 +166,8 @@ export async function verifySubscription(req, res) {
 export async function getBillingDetails(req, res) {
     try {
         const userId = req.user._id;
+        const effectivePlan = getEffectivePlan(req.user);
+        const entitlements = getPlanEntitlements(effectivePlan);
 
         // Read only from local MongoDB
         const subscription = await Subscription.findOne({
@@ -177,11 +180,13 @@ export async function getBillingDetails(req, res) {
                 success: true,
                 billing: {
                     plan: "free",
+                    effectivePlan: "free",
                     planName: "Free",
                     status: "none",
                     currentStart: null,
                     currentEnd: null,
                     cancelAtCycleEnd: false,
+                    entitlements,
                 },
             });
         }
@@ -192,6 +197,7 @@ export async function getBillingDetails(req, res) {
             success: true,
             billing: {
                 plan: subscription.planKey,
+                effectivePlan,
                 planName: plan?.name || "ChaiLM Pro",
                 amount: plan?.amount || 49900,
                 period: plan?.period || "monthly",
@@ -199,6 +205,7 @@ export async function getBillingDetails(req, res) {
                 currentStart: subscription.currentStart,
                 currentEnd: subscription.currentEnd,
                 cancelAtCycleEnd: subscription.cancelAtCycleEnd,
+                entitlements,
             },
         });
     } catch (err) {
