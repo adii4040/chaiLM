@@ -60,6 +60,7 @@ const WorkspaceSchema = new mongoose.Schema(
     workspaceId: { type: String, unique: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     title: { type: String, required: true, default: "Untitled Workspace" },
+    isSample: { type: Boolean, default: false },
     sources: [SourceSchema],
   },
   { timestamps: true }

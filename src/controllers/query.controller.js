@@ -1,5 +1,7 @@
 import { ChatMessage } from "../models/ChatMessage.model.js";
+import { Workspace } from "../models/Workspace.model.js";
 import { processQueryPipeline } from "../services/query.service.js";
+import { incrementUserUsage } from "../services/usage.service.js";
 
 /**
  * Controller to handle RAG queries
@@ -36,6 +38,12 @@ export async function handleQuery(req, res) {
     });
 
     console.log('[Query Controller] Result generated successfully for user:', userId);
+
+    // 3. Increment query usage counter for non-sample workspaces
+    const ws = await Workspace.findOne({ workspaceId: workspaceId.trim() });
+    if (!ws?.isSample) {
+      await incrementUserUsage(userId, "queries", 1);
+    }
 
     // 3. Return response with cited sources
     return res.status(200).json({

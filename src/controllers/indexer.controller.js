@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { inngest } from "../inngest/client.js";
 import { createPendingSource } from "../services/indexer.service.js";
 import { Workspace } from "../models/Workspace.model.js";
+import { incrementUserUsage } from "../services/usage.service.js";
 
 const DEFAULT_TEST_USER_ID = new mongoose.Types.ObjectId("6a6a422aae65f98e696535e9");
 
@@ -74,6 +75,14 @@ export async function handleIndexDocument(req, res) {
 
     // Pre-create initial source in MongoDB with status PENDING
     await createPendingSource(payload.workspaceId, userId, payload);
+
+    // Increment webScrapes usage counter for live website ingestion
+    if (normalizedType === "website") {
+      const ws = await Workspace.findOne({ workspaceId: payload.workspaceId });
+      if (!ws?.isSample) {
+        await incrementUserUsage(userId, "webScrapes", 1);
+      }
+    }
 
     console.log(`[Indexer Controller] Dispatching indexing & studio outline events to Inngest queue for ${normalizedType}...`);
     await inngest.send([

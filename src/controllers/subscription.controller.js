@@ -5,6 +5,7 @@ import { Subscription, LIVE_STATUSES } from "../models/subscription.model.js";
 import { config } from "../config/env.js";
 import { applyRazorpaySubscriptionToDb, getEffectivePlan } from "../services/subscription.service.js";
 import { getPlanEntitlements } from "../config/planConfig.js";
+import { getOrCreateUserUsage } from "../services/usage.service.js";
 
 const TOTAL_COUNT_BY_PERIOD = { monthly: 120, yearly: 10 }; // verify against Razorpay's limits
 
@@ -168,6 +169,7 @@ export async function getBillingDetails(req, res) {
         const userId = req.user._id;
         const effectivePlan = getEffectivePlan(req.user);
         const entitlements = getPlanEntitlements(effectivePlan);
+        const usage = await getOrCreateUserUsage(userId);
 
         // Read only from local MongoDB
         const subscription = await Subscription.findOne({
@@ -187,6 +189,7 @@ export async function getBillingDetails(req, res) {
                     currentEnd: null,
                     cancelAtCycleEnd: false,
                     entitlements,
+                    usage,
                 },
             });
         }
@@ -199,13 +202,14 @@ export async function getBillingDetails(req, res) {
                 plan: subscription.planKey,
                 effectivePlan,
                 planName: plan?.name || "ChaiLM Pro",
-                amount: plan?.amount || 49900,
+                amount: plan?.amount || 19900,
                 period: plan?.period || "monthly",
                 status: subscription.status,
                 currentStart: subscription.currentStart,
                 currentEnd: subscription.currentEnd,
                 cancelAtCycleEnd: subscription.cancelAtCycleEnd,
                 entitlements,
+                usage,
             },
         });
     } catch (err) {
