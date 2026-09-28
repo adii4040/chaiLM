@@ -177,13 +177,15 @@ export async function getBillingDetails(req, res) {
             status: { $in: ["authenticated", "active", "pending", "paused"] },
         }).sort({ createdAt: -1 });
 
-        if (!subscription) {
+        if (!subscription || effectivePlan === "free") {
             return res.status(200).json({
                 success: true,
                 billing: {
                     plan: "free",
                     effectivePlan: "free",
-                    planName: "Free",
+                    planName: "Free Tier",
+                    amount: 0,
+                    period: "monthly",
                     status: "none",
                     currentStart: null,
                     currentEnd: null,
@@ -253,7 +255,7 @@ export async function cancelSubscription(req, res) {
 
         // Sync user document
         await applyRazorpaySubscriptionToDb(remoteSub, userId);
-        
+
         // Re-ensure cancelAtCycleEnd remains true
         subscription.cancelAtCycleEnd = true;
         await subscription.save();
