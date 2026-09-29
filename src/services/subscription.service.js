@@ -267,7 +267,7 @@ export async function getUserInvoices(userId) {
       billingStart,
       billingEnd,
       shortUrl: inv.short_url || null,
-      pdfUrl: inv.short_url ? `${inv.short_url}/pdf` : null,
+      pdfUrl: inv.short_url || null,
       downloadUrl: inv.short_url || null,
       createdAt: inv.created_at ? new Date(inv.created_at * 1000) : null,
     };

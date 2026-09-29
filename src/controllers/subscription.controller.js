@@ -354,7 +354,7 @@ export async function getInvoiceById(req, res) {
                 paidAt: invoice.paid_at ? new Date(invoice.paid_at * 1000) : null,
                 issuedAt: invoice.issued_at ? new Date(invoice.issued_at * 1000) : null,
                 shortUrl: invoice.short_url || null,
-                pdfUrl: invoice.short_url ? `${invoice.short_url}/pdf` : null,
+                pdfUrl: invoice.short_url || null,
                 downloadUrl: invoice.short_url || null,
             },
         });
