@@ -3,7 +3,7 @@ import { razorpay } from "../lib/razorpay.js";
 import { Plan } from "../models/plan.model.js";
 import { Subscription, LIVE_STATUSES } from "../models/subscription.model.js";
 import { config } from "../config/env.js";
-import { applyRazorpaySubscriptionToDb, getEffectivePlan } from "../services/subscription.service.js";
+import { applyRazorpaySubscriptionToDb, getEffectivePlan, getUserInvoices } from "../services/subscription.service.js";
 import { getPlanEntitlements } from "../config/planConfig.js";
 import { getOrCreateUserUsage } from "../services/usage.service.js";
 
@@ -279,6 +279,90 @@ export async function cancelSubscription(req, res) {
         return res.status(500).json({
             success: false,
             message: err?.error?.description || "Could not cancel subscription",
+        });
+    }
+}
+
+export async function getInvoicesHistory(req, res) {
+    try {
+        const userId = req.user._id;
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 20;
+
+        const allInvoices = await getUserInvoices(userId);
+
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedInvoices = allInvoices.slice(startIndex, endIndex);
+
+        return res.status(200).json({
+            success: true,
+            invoices: paginatedInvoices,
+            totalCount: allInvoices.length,
+            page,
+            limit,
+            totalPages: Math.ceil(allInvoices.length / limit) || 1,
+        });
+    } catch (err) {
+        console.error("getInvoicesHistory failed:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Could not fetch billing invoice history",
+        });
+    }
+}
+
+export async function getInvoiceById(req, res) {
+    try {
+        const userId = req.user._id;
+        const { invoiceId } = req.params;
+
+        if (!invoiceId) {
+            return res.status(400).json({ success: false, message: "invoiceId is required" });
+        }
+
+        const invoice = await razorpay.invoices.fetch(invoiceId);
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: "Invoice not found" });
+        }
+
+        // Ownership verification: ensure the invoice belongs to one of this user's subscriptions
+        if (invoice.subscription_id) {
+            const userSub = await Subscription.findOne({
+                user: userId,
+                razorpaySubscriptionId: invoice.subscription_id,
+            });
+            if (!userSub) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied to this invoice",
+                });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            invoice: {
+                id: invoice.id,
+                invoiceNumber: invoice.invoice_number || invoice.id,
+                receipt: invoice.receipt || null,
+                amount: invoice.amount,
+                amountFormatted: `₹${((invoice.amount || 0) / 100).toFixed(2)}`,
+                amountPaid: invoice.amount_paid || 0,
+                status: invoice.status,
+                currency: invoice.currency || "INR",
+                paidAt: invoice.paid_at ? new Date(invoice.paid_at * 1000) : null,
+                issuedAt: invoice.issued_at ? new Date(invoice.issued_at * 1000) : null,
+                shortUrl: invoice.short_url || null,
+                pdfUrl: invoice.short_url ? `${invoice.short_url}/pdf` : null,
+                downloadUrl: invoice.short_url || null,
+            },
+        });
+    } catch (err) {
+        console.error("getInvoiceById failed:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Could not retrieve invoice details",
         });
     }
 }

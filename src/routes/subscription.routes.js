@@ -4,6 +4,8 @@ import {
     verifySubscription,
     getBillingDetails,
     cancelSubscription,
+    getInvoicesHistory,
+    getInvoiceById,
 } from "../controllers/subscription.controller.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
 
@@ -16,5 +18,7 @@ router.post("/create", createSubscription);
 router.post("/verify", verifySubscription);
 router.get("/me", getBillingDetails);
 router.post("/cancel", cancelSubscription);
+router.get("/invoices", getInvoicesHistory);
+router.get("/invoices/:invoiceId", getInvoiceById);
 
 export default router;

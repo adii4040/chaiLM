@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import { Subscription } from "../models/subscription.model.js";
+import { Plan } from "../models/plan.model.js";
+import { razorpay } from "../lib/razorpay.js";
 
 /**
  * Statuses that grant active plan entitlements to the user.
@@ -185,3 +187,99 @@ export function getEffectivePlanDetails(user) {
     status: user?.subscriptionStatus || "none",
   };
 }
+
+/**
+ * Fetches all Razorpay invoices associated with a user's subscriptions.
+ *
+ * @param {string|mongoose.Types.ObjectId} userId
+ * @returns {Promise<Array<object>>} Sorted array of formatted invoice objects
+ */
+export async function getUserInvoices(userId) {
+  if (!userId) return [];
+
+  // Find all subscriptions ever created for this user
+  const subscriptions = await Subscription.find({ user: userId }).sort({ createdAt: -1 });
+  if (!subscriptions || subscriptions.length === 0) {
+    return [];
+  }
+
+  // Pre-load plans for plan name mapping
+  const plans = await Plan.find({}).lean();
+  const planMap = new Map(plans.map((p) => [p.key, p]));
+
+  // Build a lookup of subscriptionId -> subscription details
+  const subMap = new Map(subscriptions.map((s) => [s.razorpaySubscriptionId, s]));
+
+  // Fetch invoices for each subscription in parallel
+  const invoicePromises = subscriptions
+    .filter((s) => Boolean(s.razorpaySubscriptionId))
+    .map(async (sub) => {
+      try {
+        const response = await razorpay.invoices.all({
+          subscription_id: sub.razorpaySubscriptionId,
+          count: 100,
+        });
+        return response?.items || [];
+      } catch (err) {
+        console.warn(`[getUserInvoices] Failed to fetch invoices for sub ${sub.razorpaySubscriptionId}:`, err?.message || err);
+        return [];
+      }
+    });
+
+  const settledResults = await Promise.allSettled(invoicePromises);
+  const rawInvoices = [];
+  for (const res of settledResults) {
+    if (res.status === "fulfilled" && Array.isArray(res.value)) {
+      rawInvoices.push(...res.value);
+    }
+  }
+
+  // Format and enrich invoice data
+  const formattedInvoices = rawInvoices.map((inv) => {
+    const sub = subMap.get(inv.subscription_id);
+    const planKey = sub?.planKey || inv.notes?.planKey || "pro_monthly";
+    const plan = planMap.get(planKey);
+
+    const paidTimestamp = inv.paid_at || inv.issued_at || inv.created_at;
+    const paidDate = paidTimestamp ? new Date(paidTimestamp * 1000) : null;
+    const billingStart = inv.billing_start ? new Date(inv.billing_start * 1000) : null;
+    const billingEnd = inv.billing_end ? new Date(inv.billing_end * 1000) : null;
+
+    const amountInPaise = inv.amount || inv.amount_paid || 0;
+    const amountInRupees = (amountInPaise / 100).toFixed(2);
+
+    return {
+      id: inv.id,
+      invoiceNumber: inv.invoice_number || inv.id,
+      receipt: inv.receipt || null,
+      orderId: inv.order_id || null,
+      paymentId: inv.payment_id || null,
+      subscriptionId: inv.subscription_id || null,
+      planKey,
+      planName: plan?.name || (planKey.includes("pro") ? "ChaiLM Pro" : "ChaiLM Standard"),
+      status: inv.status || "paid",
+      amount: amountInPaise,
+      amountFormatted: `₹${amountInRupees}`,
+      amountPaid: inv.amount_paid || 0,
+      amountDue: inv.amount_due || 0,
+      currency: inv.currency || "INR",
+      date: paidDate,
+      billingStart,
+      billingEnd,
+      shortUrl: inv.short_url || null,
+      pdfUrl: inv.short_url ? `${inv.short_url}/pdf` : null,
+      downloadUrl: inv.short_url || null,
+      createdAt: inv.created_at ? new Date(inv.created_at * 1000) : null,
+    };
+  });
+
+  // Sort latest first
+  formattedInvoices.sort((a, b) => {
+    const timeA = a.date ? new Date(a.date).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const timeB = b.date ? new Date(b.date).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return timeB - timeA;
+  });
+
+  return formattedInvoices;
+}
+
