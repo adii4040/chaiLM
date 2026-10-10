@@ -92,11 +92,30 @@ export async function applyRazorpaySubscriptionToDb(rzpSubEntity, userId = null)
   }
 
   if (currentStart) updateFields.currentStart = currentStart;
-  if (currentEnd) updateFields.currentEnd = currentEnd;
-
   let subscription = await Subscription.findOne({
     razorpaySubscriptionId: rzpSubEntity.id,
   });
+
+  const targetUserId = userId || subscription?.user;
+
+  // If this subscription is moving into an active state, cancel any previous live subscriptions for this user first
+  if (targetUserId && ACTIVE_USER_STATUSES.includes(updateFields.status)) {
+    const oldSubs = await Subscription.find({
+      user: targetUserId,
+      razorpaySubscriptionId: { $ne: rzpSubEntity.id },
+      status: { $in: ACTIVE_USER_STATUSES },
+    });
+
+    for (const oldSub of oldSubs) {
+      if (oldSub.razorpaySubscriptionId) {
+        razorpay.subscriptions.cancel(oldSub.razorpaySubscriptionId, false).catch((err) => {
+          console.warn(`[Auto-Cancel] Failed to cancel old sub ${oldSub.razorpaySubscriptionId} on Razorpay:`, err?.message || err);
+        });
+      }
+      oldSub.status = "cancelled";
+      await oldSub.save();
+    }
+  }
 
   if (subscription) {
     Object.assign(subscription, updateFields);

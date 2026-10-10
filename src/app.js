@@ -10,6 +10,8 @@ import studioRoutes from './routes/studio.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import planRoutes from './routes/plan.routes.js';
 import subscriptionRoutes from './routes/subscription.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import { createOrder, verifyPayment } from './controllers/payment.controller.js';
 import razorpayWebhookRoutes from './webhooks/razorpay/razorpay.webhook.routes.js';
 
 const app = express();
@@ -50,5 +52,10 @@ app.use('/api/user', userRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/payment', paymentRoutes);
+
+// Direct standard Razorpay endpoints
+app.post('/api/create-order', createOrder);
+app.post('/api/verify-payment', verifyPayment);
 
 export default app;

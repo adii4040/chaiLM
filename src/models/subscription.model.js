@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
-export const LIVE_STATUSES = ["created", "authenticated", "active", "pending", "paused"];
+export const LIVE_STATUSES = ["authenticated", "active", "pending", "paused"];
 
 const subscriptionSchema = new mongoose.Schema(
     {
         user: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
-            required: true
+            required: true,
         },
         planKey: { type: String, required: true },
         razorpayPlanId: { type: String, required: true },

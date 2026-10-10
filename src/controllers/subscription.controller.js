@@ -23,27 +23,27 @@ export async function createSubscription(req, res) {
         const totalCount = TOTAL_COUNT_BY_PERIOD[plan.period];
         if (!totalCount) return res.status(400).json({ success: false, message: "Unsupported plan period" });
 
-        const existing = await Subscription.findOne({ user: userId, status: { $in: LIVE_STATUSES } });
-        if (existing) {
-            // Unpaid one from an earlier click: reuse it if Razorpay still has it as "created"
-            if (existing.status === "created" && existing.planKey === plan.key) {
-                const remote = await razorpay.subscriptions.fetch(existing.razorpaySubscriptionId);
-                if (remote.status === "created") {
-                    return res.status(200).json({
-                        success: true,
-                        message: "Subscription ready",
-                        subscriptionId: existing.razorpaySubscriptionId,
-                    });
-                }
-                // Razorpay has moved on (e.g. expired). Record that, then continue if it's no longer live
-                existing.status = remote.status;
-                await existing.save();
-            }
-            if (LIVE_STATUSES.includes(existing.status)) {
-                return res.status(409).json({ success: false, message: "You already have a subscription" });
-            }
+        // 1. Prevent duplicate purchase if user is already actively paying for this exact plan
+        const alreadyActive = await Subscription.findOne({
+            user: userId,
+            planKey: plan.key,
+            status: { $in: ["authenticated", "active"] },
+        });
+
+        if (alreadyActive && !alreadyActive.cancelAtCycleEnd) {
+            return res.status(409).json({
+                success: false,
+                message: "You already have an active subscription for this plan",
+            });
         }
 
+        // 2. Mark any previously abandoned/unpaid drafts as cancelled
+        await Subscription.updateMany(
+            { user: userId, status: "created" },
+            { $set: { status: "cancelled" } }
+        );
+
+        // 3. Create fresh subscription session on Razorpay
         const rzpSub = await razorpay.subscriptions.create({
             plan_id: plan.razorpayPlanId,
             total_count: totalCount,
@@ -51,6 +51,7 @@ export async function createSubscription(req, res) {
             notes: { userId: String(userId), planKey: plan.key },
         });
 
+        // 4. Save in DB
         await Subscription.create({
             user: userId,
             planKey: plan.key,
@@ -63,7 +64,7 @@ export async function createSubscription(req, res) {
         return res.status(201).json({
             success: true,
             message: "Subscription created",
-            subscriptionId: rzpSub.id
+            subscriptionId: rzpSub.id,
         });
     } catch (err) {
         console.error("createSubscription failed:", {
@@ -141,8 +142,27 @@ export async function verifySubscription(req, res) {
         // 3. Fetch authoritative status directly from Razorpay API
         const remoteSub = await razorpay.subscriptions.fetch(subscriptionId);
 
-        // 4. Update Subscription in DB and sync User document
+        // 4. Update new Subscription in DB and sync User document
         const { subscription, user } = await applyRazorpaySubscriptionToDb(remoteSub, userId);
+
+        // 5. Upgrade/Downgrade Transition: Cancel previous active subscriptions on Razorpay & DB
+        const previousActiveSubs = await Subscription.find({
+            user: userId,
+            _id: { $ne: localSubscription._id },
+            status: { $in: ["authenticated", "active", "pending", "paused"] },
+        });
+
+        for (const oldSub of previousActiveSubs) {
+            try {
+                if (oldSub.razorpaySubscriptionId) {
+                    await razorpay.subscriptions.cancel(oldSub.razorpaySubscriptionId, false);
+                }
+            } catch (cancelErr) {
+                console.warn(`[Plan Switch] Could not cancel old Razorpay sub ${oldSub.razorpaySubscriptionId}:`, cancelErr?.message || cancelErr);
+            }
+            oldSub.status = "cancelled";
+            await oldSub.save();
+        }
 
         return res.status(200).json({
             success: true,

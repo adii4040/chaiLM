@@ -27,39 +27,63 @@ const PLANS = [
   },
 ];
 
-// Razorpay locks these after creation. Changing them needs a NEW plan (new key).
-const LOCKED_FIELDS = ["amount", "period", "interval"];
+import { razorpay } from "../lib/razorpay.js";
 
 async function seedPlan(p) {
   const existing = await Plan.findOne({ key: p.key });
+  const isForce = process.argv.includes("--force") || process.argv.includes("--live");
 
-  if (existing) {
-    const changed = LOCKED_FIELDS.filter((f) => existing[f] !== p[f]);
-    if (changed.length) {
-      console.warn(
-        `⚠ ${p.key}: ${changed.join(", ")} differ from the created plan. ` +
-          `Razorpay plans can't be edited, so these changes are ignored. Add a new plan with a new key instead.`
-      );
+  let needsFreshRazorpayPlan = isForce || !existing || !existing.razorpayPlanId;
+
+  if (existing && existing.razorpayPlanId && !isForce) {
+    try {
+      // Check if plan exists in current Razorpay account (Live vs Test)
+      await razorpay.plans.fetch(existing.razorpayPlanId);
+    } catch (fetchErr) {
+      console.log(`Plan ${existing.razorpayPlanId} not found in current Razorpay account. Creating new Live plan...`);
+      needsFreshRazorpayPlan = true;
     }
-    // Update fields that live in DB
-    await Plan.updateOne(
-      { key: p.key },
-      {
-        $set: {
-          name: p.name,
-          description: p.description,
-          entitlements: p.entitlements ?? {},
-          isActive: p.isActive ?? true,
-        },
-      }
-    );
-    console.log(`updated ${p.key} (entitlements, isActive)`);
+  }
+
+  if (needsFreshRazorpayPlan) {
+    const rzpPlan = await createRazorpayPlan(p);
+    if (existing) {
+      await Plan.updateOne(
+        { key: p.key },
+        {
+          $set: {
+            name: p.name,
+            description: p.description,
+            amount: p.amount,
+            period: p.period,
+            interval: p.interval,
+            razorpayPlanId: rzpPlan.id,
+            entitlements: p.entitlements ?? {},
+            isActive: p.isActive ?? true,
+          },
+        }
+      );
+      console.log(`✅ Re-created & synced ${p.key} in Razorpay -> ${rzpPlan.id}`);
+    } else {
+      await Plan.create({ ...p, razorpayPlanId: rzpPlan.id });
+      console.log(`✅ Created fresh ${p.key} in Razorpay -> ${rzpPlan.id}`);
+    }
     return;
   }
 
-  const rzpPlan = await createRazorpayPlan(p);
-  await Plan.create({ ...p, razorpayPlanId: rzpPlan.id });
-  console.log(`created ${p.key} -> ${rzpPlan.id}`);
+  // Update fields that live in DB
+  await Plan.updateOne(
+    { key: p.key },
+    {
+      $set: {
+        name: p.name,
+        description: p.description,
+        entitlements: p.entitlements ?? {},
+        isActive: p.isActive ?? true,
+      },
+    }
+  );
+  console.log(`✅ Updated existing ${p.key} metadata (Razorpay Plan ID: ${existing.razorpayPlanId})`);
 }
 
 async function main() {
