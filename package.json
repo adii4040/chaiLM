@@ -38,6 +38,7 @@
     "openai": "^6.49.0",
     "p-limit": "^7.3.2",
     "pdf-parse": "^2.4.5",
+    "razorpay": "^2.9.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {

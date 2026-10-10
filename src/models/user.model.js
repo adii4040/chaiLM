@@ -22,6 +22,23 @@ const userSchema = new Schema(
     },
     refreshToken: {
       type: String,
+    }, 
+
+    //subscription related fields
+    plan: {
+      type: String,
+      default: "free"
+    },
+    subscriptionStatus: {
+      type: String,
+      default: "none"
+    },
+    planExpiresAt: {
+      type: Date
+    },
+    subscription: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subscription"
     },
   },
   {

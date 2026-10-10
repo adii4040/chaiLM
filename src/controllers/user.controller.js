@@ -154,4 +154,63 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-export { registerUser, loginUser, logoutUser, getCurrentUser };
+const updateUserProfile = async (req, res) => {
+  try {
+    const { fullname } = req.body;
+    if (!fullname || fullname.trim() === '') {
+      return res.status(400).json({ error: 'Full name is required' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { fullname: fullname.trim() } },
+      { new: true }
+    ).select('-password -refreshToken');
+
+    return res.status(200).json({
+      success: true,
+      user: updatedUser,
+      message: 'Profile updated successfully',
+    });
+  } catch (error) {
+    console.error('Error in updateUserProfile:', error);
+    return res.status(500).json({ error: error.message || 'Failed to update profile' });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isCurrentValid = await user.isPasswordCorrect(currentPassword);
+    if (!isCurrentValid) {
+      return res.status(400).json({ error: 'Incorrect current password' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  } catch (error) {
+    console.error('Error in changePassword:', error);
+    return res.status(500).json({ error: error.message || 'Failed to change password' });
+  }
+};
+
+export { registerUser, loginUser, logoutUser, getCurrentUser, updateUserProfile, changePassword };
+
