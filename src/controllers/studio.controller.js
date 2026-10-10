@@ -9,6 +9,7 @@ import {
   generateMindMapArtifact,
   generateAudioOverviewArtifact,
 } from "../services/ai/index.js";
+import { incrementUserUsage } from "../services/usage.service.js";
 
 /**
  * GET /api/studio
@@ -281,6 +282,10 @@ export async function generateStudyGuide(req, res) {
       },
     });
 
+    if (!workspace.isSample) {
+      await incrementUserUsage(effectiveUserId, "studyGuides", 1);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Study guide generated successfully",
@@ -337,6 +342,10 @@ export async function generateFlashcards(req, res) {
         totalCards: flashcardData.cards?.length || 0,
       },
     });
+
+    if (!workspace.isSample) {
+      await incrementUserUsage(effectiveUserId, "flashcards", 1);
+    }
 
     return res.status(201).json({
       success: true,
@@ -398,6 +407,10 @@ export async function generateQuiz(req, res) {
       },
     });
 
+    if (!workspace.isSample) {
+      await incrementUserUsage(effectiveUserId, "quizzes", 1);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Quiz generated successfully",
@@ -449,6 +462,10 @@ export async function generateMindMap(req, res) {
         branchCount: mindmapData.rootNode?.branches?.length || 0,
       },
     });
+
+    if (!workspace.isSample) {
+      await incrementUserUsage(effectiveUserId, "mindmaps", 1);
+    }
 
     return res.status(201).json({
       success: true,
@@ -506,6 +523,10 @@ export async function generateAudioOverview(req, res) {
         durationMinutesEstimate: audioData.durationMinutesEstimate || (Number(options?.length) === 3 ? 3 : 5),
       },
     });
+
+    if (!workspace.isSample) {
+      await incrementUserUsage(effectiveUserId, "audioOverviews", 1);
+    }
 
     // Dispatch async audio synthesis background job
     await inngest.send({

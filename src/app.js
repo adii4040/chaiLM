@@ -8,6 +8,11 @@ import userRoutes from './routes/user.routes.js';
 import inngestRouter from './routes/inngest.routes.js';
 import studioRoutes from './routes/studio.routes.js';
 import healthRoutes from './routes/health.routes.js';
+import planRoutes from './routes/plan.routes.js';
+import subscriptionRoutes from './routes/subscription.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import { createOrder, verifyPayment } from './controllers/payment.controller.js';
+import razorpayWebhookRoutes from './webhooks/razorpay/razorpay.webhook.routes.js';
 
 const app = express();
 
@@ -16,7 +21,13 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: "50mb" }));
+// Capture raw body for webhook cryptographic HMAC signature verification
+app.use(express.json({
+  limit: "50mb",
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 app.use(cookieParser());
@@ -25,6 +36,10 @@ app.use(express.static('public'));
 // Health check endpoints
 app.use('/health', healthRoutes);
 app.use('/api/health', healthRoutes);
+
+// Webhook endpoints (Unauthenticated, validated via HMAC signature)
+app.use('/api/webhooks/razorpay', razorpayWebhookRoutes);
+app.use('/api/subscription/webhook', razorpayWebhookRoutes);
 
 // Inngest background event endpoint
 app.use('/api/inngest', inngestRouter);
@@ -35,5 +50,12 @@ app.use('/api/query', queryRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/studio', studioRoutes);
+app.use('/api/plans', planRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/payment', paymentRoutes);
+
+// Direct standard Razorpay endpoints
+app.post('/api/create-order', createOrder);
+app.post('/api/verify-payment', verifyPayment);
 
 export default app;

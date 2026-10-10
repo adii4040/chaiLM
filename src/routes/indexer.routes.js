@@ -3,6 +3,7 @@ import multer from "multer";
 import { upload } from "../middlewares/multer.middlewares.js";
 import { handleIndexDocument } from "../controllers/indexer.controller.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
+import { checkDocumentAndScrapingLimit } from "../middlewares/entitlement.middleware.js";
 
 const router = Router();
 
@@ -21,6 +22,6 @@ const handleUpload = (req, res, next) => {
   });
 };
 
-router.post("/", handleUpload, handleIndexDocument);
+router.post("/", handleUpload, checkDocumentAndScrapingLimit, handleIndexDocument);
 
 export default router;
