@@ -92,11 +92,12 @@ export async function applyRazorpaySubscriptionToDb(rzpSubEntity, userId = null)
   }
 
   if (currentStart) updateFields.currentStart = currentStart;
+  if (currentEnd) updateFields.currentEnd = currentEnd;
   let subscription = await Subscription.findOne({
     razorpaySubscriptionId: rzpSubEntity.id,
   });
 
-  const targetUserId = userId || subscription?.user;
+  const targetUserId = userId || subscription?.user || rzpSubEntity.notes?.userId;
 
   // If this subscription is moving into an active state, cancel any previous live subscriptions for this user first
   if (targetUserId && ACTIVE_USER_STATUSES.includes(updateFields.status)) {
@@ -120,9 +121,9 @@ export async function applyRazorpaySubscriptionToDb(rzpSubEntity, userId = null)
   if (subscription) {
     Object.assign(subscription, updateFields);
     await subscription.save();
-  } else if (userId && rzpSubEntity.plan_id) {
+  } else if (targetUserId && rzpSubEntity.plan_id) {
     subscription = await Subscription.create({
-      user: userId,
+      user: targetUserId,
       planKey: rzpSubEntity.notes?.planKey || "pro_monthly",
       razorpayPlanId: rzpSubEntity.plan_id,
       razorpaySubscriptionId: rzpSubEntity.id,
