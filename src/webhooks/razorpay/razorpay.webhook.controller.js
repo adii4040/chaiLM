@@ -14,7 +14,7 @@ export async function handleRazorpayWebhook(req, res) {
       return res.status(400).json({ success: false, message: "Missing signature header" });
     }
 
-    const secret = config.razorpay?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+    const secret = (config.razorpay?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET)?.trim();
     if (!secret) {
       console.error("[Webhook:Razorpay] CRITICAL: RAZORPAY_WEBHOOK_SECRET is not configured in server environment");
       return res.status(500).json({ success: false, message: "Webhook secret not configured" });
